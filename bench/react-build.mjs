@@ -99,7 +99,14 @@ for (const arm of arms) {
   rmSync(ledger, { force: true });
   mkdirSync(dir, { recursive: true });
 
-  const env = { ...process.env, ...ARMS[arm].env, JEV_LEDGER: ledger, JEV_DEBUG: "1" };
+  // Each arm needs its own thread store. Routing state now persists across processes by
+  // design, and every arm opens with the same first prompt — so without this, arm 2 resumes
+  // arm 1's conversation, starts with a rung already chosen, and never explores. That makes
+  // the second arm measure the first arm's decisions.
+  const threads = join(OUT, `${arm}.threads`);
+  rmSync(threads, { recursive: true, force: true });
+  mkdirSync(threads, { recursive: true });
+  const env = { ...process.env, ...ARMS[arm].env, JEV_LEDGER: ledger, JEV_THREADS: threads, JEV_DEBUG: "1" };
   process.stderr.write(`\n=== ${arm} ===\n`);
 
   const turns = [];
