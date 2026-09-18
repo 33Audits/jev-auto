@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { hasOwnStatusLine, runClaude, runCodex, loadEnvFiles } from "./runner.mjs";
 import { appraiserName } from "./appraisers/index.mjs";
 import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
-import { TIER_ORDER } from "./ladder.mjs";
+import { TIER_ORDER, canHold } from "./ladder.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
 const out = (s) => process.stdout.write(`${s}\n`);
@@ -67,6 +67,15 @@ function cmdStats() {
       `  ${name.padEnd(9)} ${String(row.turns).padStart(5)}   ` +
         `${`${Math.round(row.escalationRate * 100)}%`.padStart(9)}   ${usd(row.spend)}`,
     );
+  }
+
+  // A rung the conversation cannot fit into is not a routing choice the appraiser declined
+  // — it was never on the table. Say so, rather than let it read as the router doing nothing.
+  const unreachable = TIER_ORDER.filter((t) => !canHold(t, s.medianContext, "claude"));
+  if (unreachable.length && s.medianContext) {
+    out(`\n  Typical turn ${(s.medianContext / 1000).toFixed(0)}k tokens — too large for ${unreachable.join(", ")}`);
+    out(`    Routing can only choose between ${TIER_ORDER.filter((t) => !unreachable.includes(t)).join(", ")}.`);
+    out(`    Trimming CLAUDE.md or disabling unused MCP servers is what unlocks the cheaper rungs.`);
   }
 
   out(`\n  Boundaries   ${t.cheap} / ${t.strong}${t.calibrated ? "  (calibrated)" : "  (shipped defaults)"}`);

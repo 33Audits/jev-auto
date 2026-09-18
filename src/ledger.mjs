@@ -116,7 +116,14 @@ export function stats(records = read()) {
   for (const t of Object.values(byTier)) t.escalationRate = t.turns ? t.escalated / t.turns : 0;
   for (const b of Object.values(byShape)) b.escalationRate = b.turns ? b.escalated / b.turns : 0;
 
+  // How big a turn actually is, which decides which rungs were even eligible. A session
+  // whose context exceeds the cheapest rung's window can never be routed down, and without
+  // this the user just sees "no savings" with no reason attached.
+  const sizes = records.map((r) => r.in + r.cacheRead + r.cacheWrite).sort((a, b) => a - b);
+  const medianContext = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 0;
+
   return {
+    medianContext,
     turns: records.length,
     spend,
     baseline,

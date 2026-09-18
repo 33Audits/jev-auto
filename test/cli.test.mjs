@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,18 @@ const JEV = join(dirname(dirname(fileURLToPath(import.meta.url))), "bin", "jev.m
  * Run a subcommand fully isolated: HOME holds the ledger, TMPDIR holds the session journal.
  * Isolating only one of them leaves the test reading a developer's real sessions.
  */
+const runWith = (extra, ...args) =>
+  spawnSync(process.execPath, [JEV, ...args], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      HOME: mkdtempSync(join(tmpdir(), "jev-home-")),
+      TMPDIR: mkdtempSync(join(tmpdir(), "jev-tmp-")),
+      JEV_DEBUG: "",
+      ...extra,
+    },
+  });
+
 const run = (...args) =>
   spawnSync(process.execPath, [JEV, ...args], {
     encoding: "utf8",
@@ -77,4 +89,18 @@ test("reset is safe to run when there is nothing to reset", () => {
 
 test("version prints the package version", () => {
   assert.match(run("version").stdout.trim(), /^\d+\.\d+\.\d+$/);
+});
+
+test("stats explains an unreachable rung instead of silently showing no savings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "jev-led-"));
+  const file = join(dir, "turns.jsonl");
+  const big = (t) => JSON.stringify({
+    t: 1, shape: "s", tier: t, backend: "jev", platform: "claude", score: 0.3, conf: 0.9,
+    verdict: "ok", code: null, in: 2, out: 4, cacheRead: 308000, cacheWrite: 0,
+  });
+  writeFileSync(file, `\n${big("balanced")}\n\n${big("balanced")}\n`);
+  const { status, stdout } = runWith({ JEV_LEDGER: file }, "stats");
+  assert.equal(status, 0);
+  assert.match(stdout, /too large for fast/);
+  assert.match(stdout, /CLAUDE\.md|MCP/, "it says what to do about it");
 });

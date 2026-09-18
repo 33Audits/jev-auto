@@ -93,3 +93,14 @@ test("a record truncated by a kill does not take the next one with it", () => {
   assert.equal(records.length, 2, "only the truncated record is lost");
   assert.equal(records.at(-1).tier, "strong");
 });
+
+test("a typical turn size is reported, so unreachable rungs can be explained", () => {
+  const s = stats([turn({ in: 1000, cacheRead: 0 }), turn({ in: 300000, cacheRead: 0 }), turn({ in: 5000, cacheRead: 0 })]);
+  assert.equal(s.medianContext, 5000, "median, not mean — one huge turn should not define the session");
+  assert.equal(stats([]).medianContext, 0);
+});
+
+test("cache reads count toward the turn size that decides reachability", () => {
+  const s = stats([turn({ in: 2, out: 2, cacheRead: 308000, cacheWrite: 0 })]);
+  assert.ok(s.medianContext > 300000, "a cached conversation is still a large conversation");
+});
