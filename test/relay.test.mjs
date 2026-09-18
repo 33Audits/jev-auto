@@ -228,3 +228,26 @@ test("JEV_PIN meters a session without routing it", async (t) => {
   assert.equal(h.ledger[0].tier, "strong");
   assert.equal(h.ledger[0].backend, "pinned", "still metered, so a control arm is comparable");
 });
+
+// A turn is many requests: the opening prompt plus one per tool call. Keeping only the first
+// response's usage reported six-turn sessions that wrote a whole app as ~20 output tokens.
+test("a turn's usage is the sum of every request it took, not just the first", async (t) => {
+  const h = await harness({ usage: { input_tokens: 100, output_tokens: 50 } });
+  t.after(h.stop);
+
+  // One user turn, then two tool-loop continuations of that same turn.
+  await post(h.base, convo(["build the thing"]));
+  for (let i = 0; i < 2; i++) {
+    await post(h.base, turn("", {
+      messages: [
+        { role: "user", content: "build the thing" },
+        { role: "assistant", content: [{ type: "tool_use", id: `t${i}`, name: "Read", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: `t${i}`, content: "..." }] },
+      ],
+    }));
+  }
+  await post(h.base, convo(["build the thing", "now ship it"])); // next turn flushes the first
+
+  assert.equal(h.ledger[0].out, 150, "three requests at 50 output tokens each");
+  assert.equal(h.ledger[0].in, 300);
+});

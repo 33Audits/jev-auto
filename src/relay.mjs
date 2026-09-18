@@ -256,9 +256,16 @@ function pipeUpstream(req, res, out, { wire, upstreamURL, catalog, active, commi
           tail = (tail + text).slice(-32000);
         });
         up.on("end", () => {
-          for (const window of [head, tail]) {
-            const u = wire.meterFrom(window);
-            for (const k of ["in", "out", "cacheRead", "cacheWrite"]) pending[k] ||= u[k];
+          // A turn is many requests — every tool call is another round trip — so the turn's
+          // cost is their SUM. Taking the first response's usage and keeping it (the obvious
+          // `||=`) undercounts a turn that wrote a file to a couple of dozen output tokens.
+          //
+          // Within one response, head and tail may both contain the same usage object, so
+          // the two windows are combined with max rather than added.
+          const fromHead = wire.meterFrom(head);
+          const fromTail = wire.meterFrom(tail);
+          for (const k of ["in", "out", "cacheRead", "cacheWrite"]) {
+            pending[k] += Math.max(fromHead[k], fromTail[k]);
           }
         });
       }
