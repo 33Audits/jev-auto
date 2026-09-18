@@ -10,7 +10,7 @@
 // `input` is a flat list of `{type:"message", role, content:[{type:"input_text", text}]}`
 // plus `function_call` / `function_call_output` items once a turn is under way. Tools are
 // top level in this version, not nested inside `input`.
-import { meterFrom, readsAsRetry } from "./wire.mjs";
+import { readsAsRetry } from "./wire.mjs";
 import { rungFor } from "./ladder.mjs";
 
 const textOf = (item) =>
@@ -87,5 +87,27 @@ export const wire = {
 
   meterFrom,
 };
+
+/**
+ * Usage from a Responses stream. The field names are not Anthropic's — Codex reports
+ * `cached_tokens` and `cache_write_tokens` — and with prompt caching `input_tokens` counts
+ * only the NEW tokens, so reading it alone undercounts a cached 31k-token turn as ~100.
+ * Both numbers are needed or the cost is off by orders of magnitude.
+ *
+ * Usage lands in the final `response.completed` frame, and earlier frames carry the same
+ * object with `usage: null`, so the LAST match wins rather than the first.
+ */
+export function meterFrom(text) {
+  const last = (field) => {
+    const matches = [...String(text).matchAll(new RegExp(`"${field}"\\s*:\\s*(\\d+)`, "g"))];
+    return matches.length ? Number(matches.at(-1)[1]) : 0;
+  };
+  return {
+    in: last("input_tokens"),
+    out: last("output_tokens"),
+    cacheRead: last("cached_tokens"),
+    cacheWrite: last("cache_write_tokens"),
+  };
+}
 
 export { readsAsRetry };

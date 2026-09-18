@@ -47,6 +47,13 @@ const ARMS = {
   "claude-jev": { cli: "claude", env: { JEV_ROUTER: "jev" } },
   "codex-vanilla": { cli: "codex", env: { JEV_PIN: "long", JEV_ALLOW_LONG: "1" } },
   "codex-jev": { cli: "codex", env: { JEV_ROUTER: "jev", JEV_ALLOW_LONG: "1" } },
+
+  // Same task, same CLI, with the MCP servers left out. Not a trick: a project that does not
+  // need 227 tool schemas should not pay to send them, and whether the cheapest rung is even
+  // reachable is decided entirely by that. These arms measure what routing is worth once it
+  // has more than one legal choice.
+  "claude-clean-vanilla": { cli: "claude", env: { JEV_PIN: "balanced" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
+  "claude-clean-jev": { cli: "claude", env: { JEV_ROUTER: "jev" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
 };
 
 const run = (cmd, args, opts = {}) =>
@@ -54,11 +61,11 @@ const run = (cmd, args, opts = {}) =>
 
 /** One turn of a session. The first opens it; the rest continue the same conversation. */
 function turn(arm, dir, prompt, first, env) {
-  const { cli } = ARMS[arm];
+  const { cli, flags = [] } = ARMS[arm];
   const args =
     cli === "claude"
-      ? [JEV, ...(first ? [] : ["--continue"]), "-p", prompt]
-      : [JEV, "codex", ...(first ? ["exec"] : ["exec", "resume", "--last"]), "--skip-git-repo-check", prompt];
+      ? [JEV, ...flags, ...(first ? [] : ["--continue"]), "-p", prompt]
+      : [JEV, "codex", ...(first ? ["exec"] : ["exec", "resume", "--last"]), "--skip-git-repo-check", ...flags, prompt];
   const started = Date.now();
   const r = run(process.execPath, args, { cwd: dir, env });
   return { ms: Date.now() - started, status: r.status, stderr: (r.stderr ?? "").slice(-2000) };

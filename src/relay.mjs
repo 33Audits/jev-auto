@@ -251,7 +251,9 @@ function pipeUpstream(req, res, out, { wire, upstreamURL, catalog, active, commi
         up.on("data", (c) => {
           const text = c.toString("utf8");
           if (head.length < 4000) head += text;
-          tail = (tail + text).slice(-4000);
+          // Codex puts usage in a final frame that carries the whole response object, so the
+          // tail has to be wide enough to still contain it.
+          tail = (tail + text).slice(-32000);
         });
         up.on("end", () => {
           for (const window of [head, tail]) {

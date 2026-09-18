@@ -97,3 +97,26 @@ test("the two adapters agree on the interface the relay calls", async () => {
   }
   assert.notEqual(claude.platform, wire.platform);
 });
+
+// Codex's usage field names are not Anthropic's, and with prompt caching `input_tokens`
+// counts only new tokens. Reading it alone undercounted a cached 31k turn as ~100.
+test("usage reads Codex's own field names, including the cached bulk", () => {
+  const frame = 'data: {"type":"response.completed","response":{"usage":{"input_tokens":108,' +
+    '"output_tokens":420,"input_tokens_details":{"cached_tokens":31200},"cache_write_tokens":900,"total_tokens":31728}}}';
+  const u = wire.meterFrom(frame);
+  assert.equal(u.in, 108);
+  assert.equal(u.out, 420);
+  assert.equal(u.cacheRead, 31200, "the cached bulk is most of the turn and must not be lost");
+  assert.equal(u.cacheWrite, 900);
+});
+
+test("the last usage wins, since earlier frames carry usage: null", () => {
+  const stream =
+    'data: {"type":"response.created","response":{"usage":null,"max_output_tokens":null}}\n' +
+    'data: {"type":"response.completed","response":{"usage":{"input_tokens":50,"output_tokens":77}}}';
+  assert.equal(wire.meterFrom(stream).out, 77);
+});
+
+test("max_output_tokens is not mistaken for output_tokens", () => {
+  assert.equal(wire.meterFrom('{"max_output_tokens":99999,"output_tokens":12}').out, 12);
+});
