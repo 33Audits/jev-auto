@@ -63,6 +63,12 @@ export const RULES = {
    * covers decisions already taken. Set JEV_EXPLORE=0 to turn it off.
    */
   exploreRate: process.env.JEV_EXPLORE === undefined ? 0.15 : Number(process.env.JEV_EXPLORE),
+  /**
+   * Exploration rate when the appraiser's confidence is below `minConfidence` — i.e. when it
+   * has no opinion. A trial is most informative exactly there, and the status quo is not a
+   * better guess than cheaper, only a dearer one.
+   */
+  uncertainExploreRate: process.env.JEV_EXPLORE_UNCERTAIN === undefined ? 0.6 : Number(process.env.JEV_EXPLORE_UNCERTAIN),
 };
 
 /** How much evidence the calibrator needs before it will move a boundary. */

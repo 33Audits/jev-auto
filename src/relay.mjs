@@ -160,7 +160,13 @@ export async function startRelay({
 
               // And occasionally take the cheaper rung anyway, to find out.
               let explored = false;
-              if (state.tier === null && shouldExplore({ tier, shape, contextTokens, floor: state.floor, records: history })) {
+              if (
+                state.tier === null &&
+                shouldExplore({
+                  tier, shape, contextTokens, floor: state.floor, records: history,
+                  confidence: decision?.confidence,
+                })
+              ) {
                 tier = cheaperThan(tier) ?? tier;
                 reason = `${reason}+exploring`;
                 explored = true;

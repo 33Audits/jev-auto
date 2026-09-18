@@ -97,3 +97,37 @@ test("the report summarises each shape's trials", () => {
   assert.equal(r[0].trials, CALIBRATION.minTrials);
   assert.equal(r[0].verdict, "sufficient");
 });
+
+// Exploration is weighted by the appraiser's own uncertainty: a trial buys the most
+// information exactly where the appraiser has no opinion, and the status quo there is not a
+// better guess than cheaper, only a dearer one.
+test("uncertainty raises the exploration rate, certainty lowers it", async () => {
+  const { exploreRateFor } = await import("../src/explore.mjs");
+  const { RULES } = await import("../src/tuning.mjs");
+  const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg} (${a} vs ${b})`);
+  close(exploreRateFor(0.1), RULES.uncertainExploreRate, "no opinion -> explore freely");
+  close(exploreRateFor(1), RULES.exploreRate, "certain -> the baseline trickle");
+  assert.ok(exploreRateFor(0.5) > exploreRateFor(0.9), "monotonic in confidence");
+  assert.ok(exploreRateFor(0.9) >= RULES.exploreRate);
+});
+
+test("a missing confidence falls back to the baseline rate, never to certainty", async () => {
+  const { exploreRateFor } = await import("../src/explore.mjs");
+  const { RULES } = await import("../src/tuning.mjs");
+  assert.ok(Math.abs(exploreRateFor(undefined) - RULES.exploreRate) < 1e-9);
+  assert.ok(Math.abs(exploreRateFor(NaN) - RULES.exploreRate) < 1e-9);
+});
+
+test("an unconfident appraisal explores where a confident one would not", () => {
+  const args = { tier: "balanced", shape: "s", contextTokens: 1000, floor: null, records: [] };
+  // A draw that sits above the baseline rate but below the uncertain rate.
+  const rng = () => 0.4;
+  assert.equal(shouldExplore({ ...args, confidence: 0.2, rng }), true);
+  assert.equal(shouldExplore({ ...args, confidence: 1.0, rng }), false);
+});
+
+test("uncertainty never overrides the floor or a rung that cannot hold the request", () => {
+  const rng = () => 0;
+  assert.equal(shouldExplore({ tier: "balanced", shape: "s", contextTokens: 1000, floor: "strong", confidence: 0.1, rng }), false);
+  assert.equal(shouldExplore({ tier: "balanced", shape: "s", contextTokens: 900000, floor: null, confidence: 0.1, records: [], rng }), false);
+});
