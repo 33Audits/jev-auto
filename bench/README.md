@@ -88,3 +88,60 @@ beat a regex scorer, which is why the `llm` and `jev` appraisers exist.
   not an invoice.
 - Context size is estimated from transcript characters, not from the live request, so it
   understates what the relay sees (tool schemas dominate a real request).
+
+---
+
+## Results: building a React app (2026-09-18)
+
+Six-turn scripted build of a Vite + React todo app, replayed identically against each arm.
+Every arm was graded against the brief by `grade.mjs`, not just "did it compile".
+n=1 per arm; the harness reproduces to ~0.2% on cost, so the deltas are signal, but
+wall-clock differences under ~10% are not.
+
+### Claude Code, MCP servers disabled (~130k context)
+
+| arm | wall | spend | requirements |
+| --- | --- | --- | --- |
+| vanilla (all balanced) | 119s | $1.8749 | 7/7 |
+| routed (jev) | 123s | $1.7257 | 7/7 |
+| **ceiling (all cheapest)** | **104s** | **$0.4279** | **7/7** |
+
+The ceiling arm is the finding. The cheapest rung built the complete app — every
+requirement, tests passing — **77% cheaper and 13% faster** than the tier the CLI would
+have used, with zero escalations. The task never needed the bigger model.
+
+Routing captured **10% of that available saving**. The appraiser sent half the turns to the
+middle rung, and at 130k context each switch costs a prompt-cache rebuild that eats what the
+cheaper rung saves.
+
+So: the headroom is real and large, and the router is not yet finding it. The mechanism that
+should close the gap is the calibration loop — six clean `fast` turns are now in the ledger,
+and `CALIBRATION.minTrials` needs 50 of them before it will widen the cheap boundary. That
+is the system working as designed, slowly, rather than a missing feature.
+
+### Claude Code, MCP servers enabled (~308k context)
+
+Routing is a no-op. 227 tool schemas push every turn past the cheapest rung's 200k window,
+so `canHold` removes it before the appraiser is consulted and the only legal choice is the
+one the CLI would have picked anyway. Cost identical to the cent. `jev stats` says so.
+
+### Codex (~31-48k context)
+
+| arm | wall | spend | requirements |
+| --- | --- | --- | --- |
+| vanilla (all long) | 286s | $2.3724 | 7/7 |
+| routed (jev) | 227s | $0.7038 | 7/7 |
+
+**21% faster.** The cost column reads -70%, but the Codex rates are placeholders — the
+backend exposes no pricing field, and routed actually used MORE tokens (478k vs 330k). The
+entire dollar delta is the assumed price gap between `gpt-6-astra` and `gpt-5.6-luna/terra`.
+Set `JEV_PRICES` to make that number real. The wall-clock and the 7/7 are measured.
+
+### What this says about routing
+
+1. **Quality parity is real.** Seven arms, every one 7/7. Routing down did not ship less.
+2. **The saving is real and mostly unclaimed** — 77% available, 10% captured on Claude.
+3. **Context size decides everything.** Below ~50k routing wins; at 130k the prompt cache
+   eats it; above 200k the cheap rung is not reachable at all.
+4. **The honest headline is not "jev makes it cheaper."** It is "the cheap model was enough,
+   and something has to notice." Today that something captures a tenth of it.
