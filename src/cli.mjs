@@ -126,10 +126,20 @@ function cmdDoctor() {
   const major = Number(process.versions.node.split(".")[0]);
   add(major >= 20, `Node ${process.versions.node}`, major >= 20 ? "" : "needs >= 20.12");
 
-  // Asking the CLI itself is the only check that cannot disagree with how it gets launched.
-  const probe = spawnSync("claude", ["--version"], { shell: process.platform === "win32", encoding: "utf8" });
-  const installed = !probe.error && probe.status === 0;
-  add(installed, "Claude Code", installed ? probe.stdout.trim() : "not on PATH — https://code.claude.com/docs/en/setup");
+  // Asking each CLI itself is the only check that cannot disagree with how it gets launched.
+  // Either one is enough to be useful, so a missing CLI is only a failure if both are gone.
+  const found = {};
+  for (const [cli, url] of [
+    ["claude", "https://code.claude.com/docs/en/setup"],
+    ["codex", "https://developers.openai.com/codex/cli"],
+  ]) {
+    const probe = spawnSync(cli, ["--version"], { shell: process.platform === "win32", encoding: "utf8" });
+    found[cli] = !probe.error && probe.status === 0;
+    add(true, `${cli === "claude" ? "Claude Code" : "Codex"}: ${found[cli] ? probe.stdout.trim() : "not installed"}`,
+        found[cli] ? `jev ${cli === "claude" ? "" : "codex"}`.trim() : url);
+  }
+  add(found.claude || found.codex, "At least one CLI available",
+      found.claude || found.codex ? "" : "install Claude Code or Codex to use jev");
 
   add(true, `Routing backend: ${appraiserName()}`, appraiserName() === "local" ? "no key required" : "");
 

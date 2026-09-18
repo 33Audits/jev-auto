@@ -182,12 +182,22 @@ Token counts come off the wire, from the response the API actually returned, not
 estimate of what was sent.
 
 > **Read that "Saved" line sceptically — it is measured against all-Opus, which nobody runs.**
-> Benchmarked against all-Sonnet on 1,346 real prompts, the shipped scorer currently costs
-> **1.25× more** than simply using Sonnet, because it routes 6.8% of turns up to Opus and only
-> 3.0% down to Haiku. See [`bench/`](bench/). That is a defect, not a footnote, and it is
-> unfixed: the calibration loop is meant to correct it per-user from the ledger, but it starts
-> from shipped cutoffs that are wrong for this distribution. Do not install this expecting a
-> saving yet.
+> The honest baseline is the tier you would otherwise pin. Against that, measured on 1,346
+> real prompts with 300 live Jev calls (see [`bench/`](bench/)):
+>
+> | | vs pinning the middle tier |
+> | --- | --- |
+> | local scorer | **1.26x** — more expensive than doing nothing |
+> | Jev, before the upgrade rule | **1.19x** — still more expensive |
+> | Jev, as shipped | **0.70x** — 30% cheaper |
+>
+> The difference is one rule, not a better appraiser. Routing up costs ~5x what routing down
+> saves, and the 15% of turns that went up were 63% of spend — while only 5 of those 45
+> upward routes were above 0.9 confidence. Climbing now requires near-certainty; descending
+> does not.
+>
+> Still unmeasured: whether the cheap routes were *sufficient*. That needs the oracle in
+> `bench/README.md`. Cost and correctness are different claims and only one has a number here.
 
 ### 4. It survives contact with a real session
 
@@ -225,6 +235,7 @@ forwarded to Claude Code untouched, so `jev --resume` and `jev -p "fix the test"
 | Command | What it does |
 | --- | --- |
 | `jev [claude args...]` | Launch Claude Code with routing |
+| `jev codex [args...]` | Launch OpenAI Codex with routing |
 | `jev stats` | What routing has cost, saved, and learned |
 | `jev why` | The last routing decision, in full |
 | `jev try "<prompt>"` | Where a prompt would route, without running anything |
@@ -237,11 +248,13 @@ forwarded to Claude Code untouched, so `jev --resume` and `jev -p "fix the test"
 
 | Variable | Effect |
 | --- | --- |
-| `JEV_ROUTER` | `local` (default), `llm`, `jev`, or `off` |
+| `JEV_ROUTER` | `jev` when a key is present, else `local`. Or `llm`, or `off`. |
 | `JEV_ALLOW_FABLE=1` | Allow the long tier, which bills extra usage credits |
 | `JEV_THRESHOLDS=0.28,0.58` | Pin the boundaries and stop calibrating |
 | `JEV_NO_CALIBRATION=1` | Keep the shipped boundaries, keep measuring |
 | `JEV_NO_STATUSLINE=1` | Do not install the status line |
+| `JEV_PIN=<tier>` | Meter a session without routing it — the control arm for an A/B |
+| `JEV_LEDGER=<path>` | Point the ledger elsewhere so an experiment cannot disturb calibration |
 | `JEV_DEBUG=1` | Log every decision, and every upstream error body, to `~/.jev-auto/jev.log` |
 | `JEV_DUMP=<prefix>` | Dump request bodies when the wire format moves |
 
