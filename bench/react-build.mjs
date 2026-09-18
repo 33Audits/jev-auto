@@ -55,6 +55,12 @@ const ARMS = {
   // has more than one legal choice.
   "claude-clean-vanilla": { cli: "claude", env: { JEV_PIN: "balanced" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
   "claude-clean-jev": { cli: "claude", env: { JEV_ROUTER: "jev" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
+
+  // The ceiling arm: the whole session on the cheapest rung. This is the oracle question
+  // asked directly — if the cheap model alone meets every requirement, routing has real
+  // headroom on this task and the only question left is whether the appraiser finds it. If
+  // it does not, no routing policy can make this task cheaper without making it worse.
+  "claude-clean-cheapest": { cli: "claude", env: { JEV_PIN: "fast" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
 };
 
 const run = (cmd, args, opts = {}) =>

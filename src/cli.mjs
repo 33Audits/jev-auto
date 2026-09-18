@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { hasOwnStatusLine, runClaude, runCodex, loadEnvFiles } from "./runner.mjs";
 import { appraiserName } from "./appraisers/index.mjs";
 import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
-import { TIER_ORDER, canHold } from "./ladder.mjs";
+import { TIER_ORDER, canHold, PRICES_VERIFIED } from "./ladder.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
 const out = (s) => process.stdout.write(`${s}\n`);
@@ -57,7 +57,14 @@ function cmdStats() {
   out(`\n  ${s.turns} routed turns since ${new Date(s.since).toLocaleDateString()}\n`);
   out(`  Spent        ${usd(s.spend)}`);
   out(`  All-Opus     ${usd(s.baseline)}`);
-  out(`  Saved        ${usd(s.saved)}  (${Math.round(s.savedPct * 100)}%)\n`);
+  out(`  Saved        ${usd(s.saved)}  (${Math.round(s.savedPct * 100)}%)`);
+  // Never present a dollar figure as fact when the rate behind it was guessed.
+  const unpriced = Object.entries(PRICES_VERIFIED).filter(([, ok]) => !ok).map(([p]) => p);
+  if (unpriced.length && Object.keys(s.byTier).length) {
+    out(`\n  NOTE: ${unpriced.join(", ")} rates are placeholders, not published prices.`);
+    out(`        Token counts are measured; the dollar conversion is not. Set JEV_PRICES to fix.`);
+  }
+  out("");
 
   out("  tier      turns   escalated   spend");
   for (const name of TIER_ORDER) {

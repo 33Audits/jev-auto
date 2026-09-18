@@ -15,8 +15,12 @@ export const heightOf = (tier) => TIER_ORDER.indexOf(tier);
  *           does not is a hard 400, so it is stripped on the way down.
  * `system`  whether the rung accepts `role: "system"` entries inside the conversation.
  * `window`  usable context. Routing a 300k-token conversation onto a 200k model is a 400.
- * `in`/`out` USD per million tokens, for the savings ledger only. A display default, not a
- *           billing source of truth.
+ * `in`/`out` USD per million tokens, for the savings ledger only — a display default, never
+ *           a billing source of truth. The Anthropic figures are published rates. The OpenAI
+ *           ones are PLACEHOLDERS: the Codex backend exposes no pricing field, so they were
+ *           set by analogy to the Anthropic ladder and are almost certainly wrong. Any Codex
+ *           dollar figure is therefore unverified — token counts are measured, the
+ *           conversion is not. Override with JEV_PRICES, and see `jev stats`, which says so.
  */
 const CLAUDE = [
   { tier: "fast", id: "claude-haiku-4-5-20251001", family: "haiku", think: false, effort: false, system: false, window: 200000, in: 1, out: 5 },
@@ -43,6 +47,28 @@ export const SENTINEL = "jev-auto";
 export const isSentinel = (model) => model === SENTINEL;
 
 export const PLATFORMS = { claude: CLAUDE, codex: CODEX };
+
+/** Whether a platform's prices are published rates or our guesses. */
+export const PRICES_VERIFIED = { claude: true, codex: false };
+
+/**
+ * `JEV_PRICES` supplies real rates: `codex:fast=0.5/2,codex:balanced=2/8`. Anything it names
+ * is treated as verified, because the user supplied it.
+ */
+export function applyPriceOverrides(spec = process.env.JEV_PRICES) {
+  if (!spec) return;
+  for (const entry of spec.split(",")) {
+    const m = /^\s*(\w+):(\w+)\s*=\s*([\d.]+)\/([\d.]+)\s*$/.exec(entry);
+    if (!m) continue;
+    const [, platform, tier, input, output] = m;
+    const rung = PLATFORMS[platform]?.find((r) => r.tier === tier);
+    if (!rung) continue;
+    rung.in = Number(input);
+    rung.out = Number(output);
+    PRICES_VERIFIED[platform] = true;
+  }
+}
+applyPriceOverrides();
 
 export const ladderFor = (platform = "claude") => PLATFORMS[platform] ?? CLAUDE;
 
