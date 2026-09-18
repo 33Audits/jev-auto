@@ -66,6 +66,14 @@ export function verdictFor({ prompt, decision, current, available, contextTokens
   const target = decision.choice;
 
   if (decision.confidence < RULES.minConfidence) {
+    // Opt-in: treat "no opinion" as a reason to go cheap rather than a reason to stand
+    // still. Standing still means keeping whichever rung the session happens to be on,
+    // which on a first turn is the balanced default — the dearer of the two.
+    if (RULES.cheapWhenUnsure()) {
+      const affordable = available.filter((t) => canHold(t, contextTokens));
+      const cheapest = TIER_ORDER.find((t) => affordable.includes(t));
+      if (cheapest && heightOf(cheapest) < heightOf(current)) return conclude(cheapest, "no-opinion-so-cheapest");
+    }
     if (heightOf(target) < heightOf(current)) return conclude(current, "low-confidence-no-downgrade");
     const ceiling = Math.max(heightOf(current), heightOf(RULES.uncertainCeiling));
     if (heightOf(target) > ceiling) return conclude(TIER_ORDER[ceiling], "low-confidence-capped");

@@ -114,3 +114,27 @@ test("the user can still climb by asking, whatever the confidence", () => {
   const d = verdictFor({ prompt: "use opus", decision: routed("fast", 0.99), current: "fast", available: ALL });
   assert.equal(d.tier, "strong");
 });
+
+// Below minConfidence the appraiser is not expressing a preference. Using a non-preference to
+// keep the dearer rung is a choice, and an expensive one — but going cheap costs a weak first
+// answer, so it is opt-in rather than the default.
+test("no-opinion holds the rung by default, and goes cheapest when asked to", (t) => {
+  const unsure = { choice: "balanced", confidence: 0.1 };
+  const args = { prompt: "x", decision: unsure, current: "balanced", available: ALL };
+
+  assert.equal(verdictFor(args).tier, "balanced", "default: the appraiser's call stands");
+
+  process.env.JEV_CHEAP_WHEN_UNSURE = "1";
+  t.after(() => delete process.env.JEV_CHEAP_WHEN_UNSURE);
+
+  const cheap = verdictFor(args);
+  assert.equal(cheap.tier, "fast");
+  assert.match(cheap.reason, /no-opinion-so-cheapest/);
+
+  // Still never into a rung that cannot hold the request.
+  assert.notEqual(verdictFor({ ...args, contextTokens: 900000 }).tier, "fast");
+
+  // And a confident call is untouched by the mode.
+  const confident = verdictFor({ ...args, decision: { choice: "balanced", confidence: 0.95 } });
+  assert.equal(confident.tier, "balanced");
+});

@@ -60,6 +60,10 @@ const ARMS = {
   // asked directly — if the cheap model alone meets every requirement, routing has real
   // headroom on this task and the only question left is whether the appraiser finds it. If
   // it does not, no routing policy can make this task cheaper without making it worse.
+  // The opt-in mode: when the appraiser has no opinion, take the cheapest rung that fits
+  // rather than the dearer status quo. Measures whether routing can reach the ceiling.
+  "claude-clean-unsure": { cli: "claude", env: { JEV_ROUTER: "jev", JEV_CHEAP_WHEN_UNSURE: "1" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
+
   "claude-clean-cheapest": { cli: "claude", env: { JEV_PIN: "fast" }, flags: ["--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}"] },
 };
 
