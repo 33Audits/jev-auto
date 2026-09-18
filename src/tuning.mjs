@@ -45,10 +45,12 @@ export const RULES = {
   upgradeMinConfidence: 0.9,
   uncertainCeiling: "balanced",
   /**
-   * Switching models discards the prompt cache and the next turn re-sends the conversation.
-   * Past roughly this size a downgrade costs more in cache rebuild than it saves in tokens.
+   * Switching models discards the prompt cache and the next turn re-sends the conversation
+   * as cache writes, billed at 1.25x input where a read would have been 0.1x. One switch
+   * therefore costs roughly twelve turns of reading, so past this size a conversation should
+   * stay where it is regardless of which direction the appraiser wants to move.
    */
-  downgradeMaxContextTokens: 20000,
+  switchMaxContextTokens: 20000,
   /**
    * After the router is caught routing too cheap (the user escalated, or the turn errored),
    * the conversation holds a floor for this many turns. Without it the router can oscillate

@@ -38,12 +38,17 @@ test("low confidence caps an upgrade at the safe tier", () => {
   assert.match(d.reason, /low-confidence-capped/);
 });
 
-test("a downgrade is refused once the prompt cache is worth more than it saves", () => {
+test("any switch is refused once the prompt cache is worth more than it saves", () => {
   const cheap = verdictFor({ prompt: "x", decision: routed("fast"), current: "strong", available: ALL, contextTokens: 1000, hasCache: true });
   assert.equal(cheap.tier, "fast");
   const expensive = verdictFor({ prompt: "x", decision: routed("fast"), current: "strong", available: ALL, contextTokens: 120000, hasCache: true });
   assert.equal(expensive.tier, "strong");
   assert.match(expensive.reason, /cache-rebuild/);
+
+  // Upgrades thrash the cache exactly as hard as downgrades do.
+  const up = verdictFor({ prompt: "x", decision: routed("strong", 0.99), current: "fast", available: ALL, contextTokens: 120000, hasCache: true });
+  assert.equal(up.tier, "fast", "a confident upgrade still loses to the cache it would discard");
+  assert.match(up.reason, /cache-rebuild/);
 });
 
 test("the first turn is freely routable: a big context with no cache is not a cache to protect", () => {

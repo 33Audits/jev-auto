@@ -82,8 +82,15 @@ export function verdictFor({ prompt, decision, current, available, contextTokens
   // Only guard a cache that exists. On the first turn of a conversation the context is
   // large but nothing has been cached against a model yet, so there is nothing to discard —
   // and that first turn is where most of the available saving is.
-  if (hasCache && heightOf(target) < heightOf(current) && contextTokens > RULES.downgradeMaxContextTokens) {
-    return conclude(current, "downgrade-not-worth-cache-rebuild");
+  //
+  // The guard covers a change in EITHER direction. Switching model discards the prompt
+  // cache whichever way you go, and the rebuild is billed at 1.25x input against the 0.1x a
+  // cache read would have cost — so one switch costs about 12.5 turns of reading. Measured
+  // on a six-turn React build at ~130k context: the routed arm rewrote 571k tokens of cache
+  // against the pinned arm's 161k, and came out 57% more expensive despite spending half
+  // its turns on the cheaper rung. Guarding only downgrades let every upgrade thrash it.
+  if (hasCache && heightOf(target) !== heightOf(current) && contextTokens > RULES.switchMaxContextTokens) {
+    return conclude(current, "switch-not-worth-cache-rebuild");
   }
 
   return conclude(target, "routed");
