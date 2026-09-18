@@ -69,8 +69,8 @@ export const RULES = {
    * better guess than cheaper, only a dearer one.
    */
   /**
-   * OPT-IN. When the appraiser's confidence is below `minConfidence` it is not expressing a
-   * preference — and using a non-preference to pick the dearer rung costs real money. With
+   * ON by default; JEV_CHEAP_WHEN_UNSURE=0 turns it off. When Jev's confidence is below
+   * `minConfidence` it is not expressing a preference — and using a non-preference to pick the dearer rung costs real money. With
    * this set, a no-opinion turn takes the cheapest rung that can hold the request instead,
    * and relies on the escalation floor to recover if that was wrong.
    *
@@ -78,10 +78,12 @@ export const RULES = {
    * cheaper and 8% faster, while the appraiser returned balanced at 0.27 confidence on the
    * turn that decides the session. Default routing therefore saved nothing on that task.
    *
-   * The cost of being wrong is a weak first answer followed by one re-do. That is a real
-   * quality trade and why this is off by default rather than the shipped behaviour.
+   * Measured with it on: $0.4810 against $1.9383 pinned, 18% faster, all seven requirements
+   * met — within 4% of the pinned-cheapest bookend, so routing finds essentially all of the
+   * available saving. Acting on Jev's uncertainty is what makes routing pay; following its
+   * choice alone saved nothing (+3%).
    */
-  cheapWhenUnsure: () => process.env.JEV_CHEAP_WHEN_UNSURE === "1",
+  cheapWhenUnsure: () => process.env.JEV_CHEAP_WHEN_UNSURE !== "0",
   uncertainExploreRate: process.env.JEV_EXPLORE_UNCERTAIN === undefined ? 0.6 : Number(process.env.JEV_EXPLORE_UNCERTAIN),
 };
 

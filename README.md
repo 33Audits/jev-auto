@@ -181,23 +181,27 @@ jev stats
 Token counts come off the wire, from the response the API actually returned, not from an
 estimate of what was sent.
 
-> **Read that "Saved" line sceptically — it is measured against all-Opus, which nobody runs.**
-> The honest baseline is the tier you would otherwise pin. Against that, measured on 1,346
-> real prompts with 300 live Jev calls (see [`bench/`](bench/)):
+> **Measured, building the same React app six ways.** Every arm met all seven requirements
+> of the brief — `bench/grade.mjs` checks them, not just whether it compiled.
 >
-> | | vs pinning the middle tier |
-> | --- | --- |
-> | local scorer | **1.26x** — more expensive than doing nothing |
-> | Jev, before the upgrade rule | **1.19x** — still more expensive |
-> | Jev, as shipped | **0.70x** — 30% cheaper |
+> | | wall | spend | requirements |
+> | --- | --- | --- | --- |
+> | vanilla Claude Code (Sonnet) | 114s | $1.9383 | 7/7 |
+> | **jev** | **93s** | **$0.4810** | **7/7** |
+> | bookend: pinned to the cheapest rung | 77s | $0.4601 | 7/7 |
 >
-> The difference is one rule, not a better appraiser. Routing up costs ~5x what routing down
-> saves, and the 15% of turns that went up were 63% of spend — while only 5 of those 45
-> upward routes were above 0.9 confidence. Climbing now requires near-certainty; descending
-> does not.
+> **75% cheaper, 18% faster, same app** — and within 4% of the pinned-cheapest bookend, so
+> routing finds essentially all of the saving that was there.
 >
-> Still unmeasured: whether the cheap routes were *sufficient*. That needs the oracle in
-> `bench/README.md`. Cost and correctness are different claims and only one has a number here.
+> What makes it pay is acting on Jev's *uncertainty*, not just its answer. Following Jev's
+> choice alone saved nothing (+3%): it returns `balanced` at ~0.27 confidence on the turn that
+> decides the session, and the prompt-cache guard then pins the whole conversation to that
+> rung. Below `minConfidence` Jev is telling you it has no preference — so jev-auto takes the
+> cheapest rung that fits and lets the escalation floor recover if that was wrong.
+>
+> Caveats worth knowing: n=1 per arm (cost is deterministic, wall-clock is noisy); Claude with
+> 227 MCP tool schemas loaded runs at 308k context where the cheapest rung is unreachable and
+> routing is a no-op; Codex is 21% faster but its dollar figures use placeholder rates.
 
 ### 4. It survives contact with a real session
 
@@ -253,6 +257,7 @@ forwarded to Claude Code untouched, so `jev --resume` and `jev -p "fix the test"
 | `JEV_THRESHOLDS=0.28,0.58` | Pin the boundaries and stop calibrating |
 | `JEV_NO_CALIBRATION=1` | Keep the shipped boundaries, keep measuring |
 | `JEV_NO_STATUSLINE=1` | Do not install the status line |
+| `JEV_CHEAP_WHEN_UNSURE=0` | Keep the current rung when Jev has no opinion, instead of going cheapest |
 | `JEV_PIN=<tier>` | Meter a session without routing it — the control arm for an A/B |
 | `JEV_LEDGER=<path>` | Point the ledger elsewhere so an experiment cannot disturb calibration |
 | `JEV_DEBUG=1` | Log every decision, and every upstream error body, to `~/.jev-auto/jev.log` |

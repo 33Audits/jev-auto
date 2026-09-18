@@ -26,10 +26,16 @@ test("a nonsense answer holds the current tier", () => {
   assert.equal(d.tier, "strong");
 });
 
-test("low confidence never downgrades", () => {
-  const d = verdictFor({ prompt: "x", decision: routed("fast", 0.1), current: "strong", available: ALL });
-  assert.equal(d.tier, "strong");
-  assert.match(d.reason, /low-confidence-no-downgrade/);
+test("low confidence resolves cheapest, and holds the rung when switched off", (t) => {
+  // Superseded rule: holding the dearer status quo on a non-opinion cost the whole session.
+  const unsure = { prompt: "x", decision: routed("fast", 0.1), current: "strong", available: ALL };
+  assert.equal(verdictFor(unsure).tier, "fast");
+
+  process.env.JEV_CHEAP_WHEN_UNSURE = "0";
+  t.after(() => delete process.env.JEV_CHEAP_WHEN_UNSURE);
+  const held = verdictFor(unsure);
+  assert.equal(held.tier, "strong");
+  assert.match(held.reason, /low-confidence-no-downgrade/);
 });
 
 test("low confidence caps an upgrade at the safe tier", () => {
@@ -118,14 +124,13 @@ test("the user can still climb by asking, whatever the confidence", () => {
 // Below minConfidence the appraiser is not expressing a preference. Using a non-preference to
 // keep the dearer rung is a choice, and an expensive one — but going cheap costs a weak first
 // answer, so it is opt-in rather than the default.
-test("no-opinion holds the rung by default, and goes cheapest when asked to", (t) => {
+test("no-opinion goes cheapest by default, and can be switched off", () => {
   const unsure = { choice: "balanced", confidence: 0.1 };
   const args = { prompt: "x", decision: unsure, current: "balanced", available: ALL };
 
-  assert.equal(verdictFor(args).tier, "balanced", "default: the appraiser's call stands");
-
-  process.env.JEV_CHEAP_WHEN_UNSURE = "1";
-  t.after(() => delete process.env.JEV_CHEAP_WHEN_UNSURE);
+  process.env.JEV_CHEAP_WHEN_UNSURE = "0";
+  assert.equal(verdictFor(args).tier, "balanced", "switched off: the appraiser's call stands");
+  delete process.env.JEV_CHEAP_WHEN_UNSURE;
 
   const cheap = verdictFor(args);
   assert.equal(cheap.tier, "fast");
