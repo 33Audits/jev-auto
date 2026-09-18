@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { startRelay } from "../src/relay.mjs";
 import { SENTINEL } from "../src/ladder.mjs";
 import { fakeUpstream, post } from "./stub-api.mjs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+// Each case gets its own thread store: routing state now persists across processes, so
+// without this one test's conversation would be resumed by the next.
 const SESSION = { user_id: JSON.stringify({ session_id: "test-session" }) };
 
 const turn = (text, over = {}) => ({
@@ -29,6 +34,9 @@ const convo = (texts, over = {}) => {
 
 /** Boot a proxy with a stub router and a captured ledger. */
 async function harness({ choice = "fast", confidence = 0.9, status = 200, usage } = {}) {
+  // Routing state persists across processes now, so each case needs its own store or one
+  // test's conversation gets resumed by the next.
+  process.env.JEV_THREADS = mkdtempSync(join(tmpdir(), "jev-threads-"));
   const up = await fakeUpstream({ status, usage });
   const calls = [];
   const ledger = [];

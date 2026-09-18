@@ -107,9 +107,14 @@ export const wire = {
 
   /**
    * Which conversation a request belongs to. Sub-agents run through the same endpoint, so a
-   * single pinned rung would let a sub-agent's choice leak into the main conversation. Only
-   * stable fields may be used: Claude Code moves its `cache_control` breakpoint between
-   * requests, so the key is the session id plus the first message's text.
+   * single pinned rung would let a sub-agent's choice leak into the main conversation.
+   *
+   * The first message's text alone, deliberately — NOT the session id. Claude Code issues a
+   * fresh session_id for every `-p --continue` invocation, so including it split a single
+   * scripted conversation into one thread per turn: no cache was ever recognised, the
+   * prompt-cache guard never fired, and every turn was free to switch model and pay a
+   * rebuild. The first message is fixed for the life of a conversation and differs between
+   * the main agent and each sub-agent, which is exactly the identity wanted here.
    */
   threadKey(body) {
     const content = body?.messages?.[0]?.content;
@@ -119,7 +124,7 @@ export const wire = {
         : Array.isArray(content)
           ? content.filter((b) => b.type === "text").map((b) => b.text).join("")
           : "";
-    return createHash("sha1").update(`${this.sessionIdOf(body)}|${text}`).digest("hex").slice(0, 12);
+    return createHash("sha1").update(text).digest("hex").slice(0, 12);
   },
 
   /**

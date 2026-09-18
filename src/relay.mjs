@@ -12,6 +12,7 @@ import { RULES } from "./tuning.mjs";
 import { applyLearned, cheaperThan, shouldExplore } from "./explore.mjs";
 import { debug, log } from "./diag.mjs";
 import { recordDecision, recordManual } from "./journal.mjs";
+import { load as loadThread, save as saveThread, sweep as sweepThreads } from "./threads.mjs";
 import { wire as claudeWire } from "./wire.mjs";
 import { readsAsRetry } from "./wire.mjs";
 
@@ -40,6 +41,7 @@ export async function startRelay({
   // re-deriving per turn would shift a session's routing under the user mid-task.
   const history = readLedger();
   const cutoffs = calibratedCutoffs(history);
+  sweepThreads();
   debug(`${platform}: cutoffs ${cutoffs.cheap}/${cutoffs.strong} appraiser=${appraiserName()}`);
 
   const commit = (state, verdict = "ok", code = null) => {
@@ -56,7 +58,11 @@ export async function startRelay({
         commit(threads.get(oldest));
         threads.delete(oldest);
       }
-      threads.set(key, (s = { tier: null, model: null, pending: null, floor: null, floorTurns: 0 }));
+      // Continue a conversation this process did not start: `jev -p` is a new process per
+      // invocation, and without this every scripted turn looked like a first turn.
+      const persisted = loadThread(key);
+      s = { tier: null, model: null, pending: null, floor: null, floorTurns: 0, ...(persisted ?? {}) };
+      threads.set(key, s);
     }
     return s;
   };
@@ -174,6 +180,7 @@ export async function startRelay({
 
               state.tier = tier;
               state.model = tier === current && state.model ? state.model : modelIdFor(models, tier, platform);
+              saveThread(wire.threadKey(body), state);
               state.pending = {
                 t: Date.now(), shape, tier,
                 backend: decision?.backend ?? "none", score: decision?.score ?? null,
