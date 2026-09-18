@@ -36,7 +36,32 @@ Raw agreement is misleading when one tier holds most of the mass, so agreement i
 reported as Cohen's kappa, which subtracts what you would get by chance at those base rates.
 Kappa against a constant baseline is degenerate and is reported as n/a.
 
-## What is NOT measured, and it is the important one
+## The oracle (implemented)
+
+```bash
+node bench/oracle.mjs --tasks bench/tasks/tasks.json --runs 1   # costs real money, run once
+node bench/score.mjs  --router bench/router-run.json            # free, repeatable
+```
+
+Methodology taken from a benchmark that does this properly —
+[kyotofin/tax-doc-classifier](https://github.com/kyotofin/tax-doc-classifier), which reports
+1,067 externally-sourced pages with a strict-error column beside its cost column and a named
+baseline measured in the same session. Three things copied from it:
+
+1. **The work is not authored here.** Each task is a real repository at a pinned commit with
+   its own test suite. A mechanical mutation removes the first guard in a target file; the
+   model is asked to make the tests pass without touching them. The repo's tests decide, not
+   a checklist of mine. The suite is verified green *before* the mutation and verified broken
+   *after* it, so a task that measures nothing is skipped rather than scored.
+2. **Strict accuracy sits beside cost, and comes first.** `score.mjs` leads with strict
+   errors — tasks routed below what they needed, and therefore failed. Without that column
+   "cheaper" is unfalsifiable: a router that always picks the cheapest rung wins on spend.
+3. **The baseline is named and measured in the same run**, never quoted from elsewhere.
+
+`oracle[task]` is the cheapest rung that actually passed every run it was given. Once built,
+any router is scored against it offline, free, forever.
+
+## What was NOT measured before this
 
 **Whether a routing decision was correct.** Nothing above knows that. It measures what the
 router does and what it costs, not whether the tier it picked could do the job.

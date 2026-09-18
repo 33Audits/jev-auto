@@ -1,0 +1,22 @@
+[
+  {
+    "id": "camelcase-revert",
+    "repo": "https://github.com/sindresorhus/camelcase.git",
+    "ref": "main",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "break": "src/index.js",
+    "prompt": "The test suite is failing. Find the cause and fix it so every test passes. Do not change the tests.",
+    "difficulty": "easy"
+  },
+  {
+    "id": "slugify-revert",
+    "repo": "https://github.com/sindresorhus/slugify.git",
+    "ref": "main",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "break": "index.js",
+    "prompt": "The test suite is failing. Find the cause and fix it so every test passes. Do not change the tests.",
+    "difficulty": "medium"
+  }
+]

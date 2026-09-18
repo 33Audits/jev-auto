@@ -4,3 +4,5 @@ node_modules/
 .DS_Store
 bench/corpus*.jsonl
 bench/jev-cache.json
+bench/.work/
+bench/oracle.json
