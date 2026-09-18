@@ -42,6 +42,7 @@ export function toSchema(r) {
     tier: TIER_ORDER.includes(r.tier) ? r.tier : "unknown",
     backend: typeof r.backend === "string" ? r.backend.slice(0, 16) : "unknown",
     platform: r.platform in PLATFORMS ? r.platform : "claude",
+    explored: r.explored === true,
     score: Number.isFinite(r.score) ? Number(r.score.toFixed(3)) : null,
     conf: Number.isFinite(r.conf) ? Number(r.conf.toFixed(3)) : null,
     verdict: VERDICTS.includes(r.verdict) ? r.verdict : "ok",

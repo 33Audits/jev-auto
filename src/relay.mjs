@@ -9,6 +9,7 @@ import { selectAppraiser, appraiserName } from "./appraisers/index.mjs";
 import { cutoffs as calibratedCutoffs } from "./calibrate.mjs";
 import { append as recordTurn, read as readLedger } from "./ledger.mjs";
 import { RULES } from "./tuning.mjs";
+import { applyLearned, cheaperThan, shouldExplore } from "./explore.mjs";
 import { debug, log } from "./diag.mjs";
 import { recordDecision, recordManual } from "./journal.mjs";
 import { wire as claudeWire } from "./wire.mjs";
@@ -37,7 +38,8 @@ export async function startRelay({
   const catalog = new Map();
   // Cutoffs are derived once at startup: the ledger only moves them across sessions, and
   // re-deriving per turn would shift a session's routing under the user mid-task.
-  const cutoffs = calibratedCutoffs(readLedger());
+  const history = readLedger();
+  const cutoffs = calibratedCutoffs(history);
   debug(`${platform}: cutoffs ${cutoffs.cheap}/${cutoffs.strong} appraiser=${appraiserName()}`);
 
   const commit = (state, verdict = "ok", code = null) => {
@@ -142,16 +144,35 @@ export async function startRelay({
                 )
                 .catch((err) => (log(`appraiser failed, holding ${current}: ${err.message}`), null));
 
-              const { tier, reason } = verdictFor({
+              let { tier, reason } = verdictFor({
                 prompt, decision, current, available, contextTokens,
                 hasCache: state.tier !== null, floor: state.floor, platform,
               });
+
+              // Everything exploration has already established, applied. This is where the
+              // trials turn into saving rather than just data.
+              const shape = decision?.shape ?? "unknown";
+              const learned = applyLearned({ tier, shape, contextTokens, floor: state.floor, records: history });
+              if (learned !== tier) {
+                tier = learned;
+                reason = `${reason}+learned-cheaper`;
+              }
+
+              // And occasionally take the cheaper rung anyway, to find out.
+              let explored = false;
+              if (state.tier === null && shouldExplore({ tier, shape, contextTokens, floor: state.floor, records: history })) {
+                tier = cheaperThan(tier) ?? tier;
+                reason = `${reason}+exploring`;
+                explored = true;
+              }
+
               state.tier = tier;
               state.model = tier === current && state.model ? state.model : modelIdFor(models, tier, platform);
               state.pending = {
-                t: Date.now(), shape: decision?.shape ?? "unknown", tier,
+                t: Date.now(), shape, tier,
                 backend: decision?.backend ?? "none", score: decision?.score ?? null,
-                conf: decision?.confidence ?? null, in: 0, out: 0, cacheRead: 0, cacheWrite: 0,
+                conf: decision?.confidence ?? null, platform, explored,
+                in: 0, out: 0, cacheRead: 0, cacheWrite: 0,
               };
               debug(
                 `${platform}: ${tier} (${reason}) score=${decision?.score?.toFixed(2) ?? "n/a"} ` +

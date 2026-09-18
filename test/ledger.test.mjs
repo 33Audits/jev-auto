@@ -20,7 +20,7 @@ test("a record never carries prompt text, file names, or model output", () => {
     code: "freeform judge prose that quotes the content",
   });
   assert.deepEqual(Object.keys(dirty).sort(), [
-    "backend", "cacheRead", "cacheWrite", "code", "conf", "in", "out", "platform", "score", "shape", "t", "tier", "verdict",
+    "backend", "cacheRead", "cacheWrite", "code", "conf", "explored", "in", "out", "platform", "score", "shape", "t", "tier", "verdict",
   ]);
   assert.equal(dirty.code, null, "an off-vocabulary reason code is dropped, not stored");
   assert.ok(!JSON.stringify(dirty).includes("secret"));

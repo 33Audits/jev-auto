@@ -11,6 +11,8 @@ import { hasOwnStatusLine, runClaude, runCodex, loadEnvFiles } from "./runner.mj
 import { appraiserName } from "./appraisers/index.mjs";
 import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
 import { TIER_ORDER, canHold, PRICES_VERIFIED } from "./ladder.mjs";
+import { explorationReport } from "./explore.mjs";
+import { CALIBRATION } from "./tuning.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
 const out = (s) => process.stdout.write(`${s}\n`);
@@ -87,6 +89,20 @@ function cmdStats() {
 
   out(`\n  Boundaries   ${t.cheap} / ${t.strong}${t.calibrated ? "  (calibrated)" : "  (shipped defaults)"}`);
   for (const note of t.notes) out(`    · ${note}`);
+
+  // What trying the cheaper rung has actually established. This is the loop that turns a
+  // proven-but-unclaimed saving into a claimed one, so it is worth showing its progress.
+  const explored = explorationReport(records);
+  if (explored.length) {
+    out("\n  Cheaper-rung trials");
+    for (const e of explored.slice(0, 6)) {
+      const verdict =
+        e.verdict === "sufficient" ? "PROVEN — now the default for this shape"
+        : e.verdict === "insufficient" ? "no — keeps needing the bigger model"
+        : `${e.trials}/${CALIBRATION.minTrials} trials so far`;
+      out(`    ${e.tier.padEnd(9)} ${e.shape.padEnd(30)} ${Math.round(e.rate * 100)}% escalated  ${verdict}`);
+    }
+  }
 
   const problems = problemShapes(records);
   if (problems.length) {

@@ -57,6 +57,12 @@ export const RULES = {
    * on a conversation that has simply become hard.
    */
   escalationStickyTurns: 3,
+  /**
+   * Fraction of turns that take the cheaper rung the appraiser did not choose, to find out
+   * whether it would have sufficed. Escalation data alone cannot answer that — it only
+   * covers decisions already taken. Set JEV_EXPLORE=0 to turn it off.
+   */
+  exploreRate: process.env.JEV_EXPLORE === undefined ? 0.15 : Number(process.env.JEV_EXPLORE),
 };
 
 /** How much evidence the calibrator needs before it will move a boundary. */
