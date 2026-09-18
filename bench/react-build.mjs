@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { read as readLedger, stats as summarize } from "../src/ledger.mjs";
+import { grade } from "./grade.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const JEV = join(ROOT, "bin", "jev.mjs");
@@ -105,6 +106,9 @@ for (const arm of arms) {
   }
 
   const check = verify(dir);
+  // Cost is only comparable between arms that built the same thing. An arm that routed
+  // cheaply and shipped less has not saved anything.
+  const g = grade(dir);
   const s = summarize(readLedger(ledger));
   const row = {
     arm,
@@ -114,20 +118,29 @@ for (const arm of arms) {
     mix: Object.fromEntries(Object.entries(s.byTier).map(([k, v]) => [k, v.turns])),
     built: check.built,
     tested: check.tested,
+    requirements: `${g.score}/${g.total}`,
+    missing: g.missing.map((m) => m.id),
     why: check.why,
   };
   results.push(row);
   writeFileSync(join(OUT, "results.json"), JSON.stringify(results, null, 2));
-  process.stderr.write(`  -> ${row.wallSeconds}s  $${row.spend.toFixed(4)}  built=${row.built} tested=${row.tested}\n`);
+  process.stderr.write(
+    `  -> ${row.wallSeconds}s  $${row.spend.toFixed(4)}  built=${row.built} tested=${row.tested} reqs=${row.requirements}\n`,
+  );
 }
 
 const usd = (x) => `$${x.toFixed(4)}`;
-console.log(`\n  arm              wall    spend      turns  mix                       built  tested`);
+console.log(`\n  arm                     wall    spend      mix                       reqs  built  tested`);
 for (const r of results) {
   console.log(
-    `  ${r.arm.padEnd(16)} ${String(r.wallSeconds).padStart(4)}s  ${usd(r.spend).padStart(9)}  ` +
-      `${String(r.turns).padStart(5)}  ${JSON.stringify(r.mix).padEnd(24)}  ${String(r.built).padEnd(5)}  ${r.tested}`,
+    `  ${r.arm.padEnd(22)} ${String(r.wallSeconds).padStart(4)}s  ${usd(r.spend).padStart(9)}  ` +
+      `${JSON.stringify(r.mix).padEnd(24)}  ${r.requirements}  ${String(r.built).padEnd(5)}  ${r.tested}`,
   );
+}
+// A cheaper arm that met fewer requirements is not a saving, and the comparison below is
+// only meaningful when the arms scored the same.
+if (new Set(results.map((r) => r.requirements)).size > 1) {
+  console.log("\n  NOTE: arms did not meet the same requirements — cost is not comparable between them.");
 }
 for (const cli of ["claude", "codex"]) {
   const v = results.find((r) => r.arm === `${cli}-vanilla`);
