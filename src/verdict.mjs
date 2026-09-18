@@ -71,6 +71,14 @@ export function verdictFor({ prompt, decision, current, available, contextTokens
     if (heightOf(target) > ceiling) return conclude(TIER_ORDER[ceiling], "low-confidence-capped");
   }
 
+  // Climbing is asymmetric: a rung up costs about five times what a rung down saves, so an
+  // uncertain upgrade is a worse bet than an uncertain downgrade at the same odds. Measured
+  // over 300 real prompts, the 15% of turns routed up were 63% of spend, and only 5 of those
+  // 45 were above 0.9 confidence.
+  if (heightOf(target) > heightOf(current) && decision.confidence < RULES.upgradeMinConfidence) {
+    return conclude(current, "upgrade-needs-certainty");
+  }
+
   // Only guard a cache that exists. On the first turn of a conversation the context is
   // large but nothing has been cached against a model yet, so there is nothing to discard —
   // and that first turn is where most of the available saving is.

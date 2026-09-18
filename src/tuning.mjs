@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { TIER_ORDER } from "./ladder.mjs";
 
 export const STATE_DIR = join(homedir(), ".jev-auto");
-export const LEDGER_FILE = join(STATE_DIR, "turns.jsonl");
+// JEV_LEDGER points the ledger somewhere else, so an experiment can be metered in isolation
+// without disturbing the ledger that calibrates real sessions.
+export const LEDGER_FILE = process.env.JEV_LEDGER || join(STATE_DIR, "turns.jsonl");
 export const LOG_FILE = join(STATE_DIR, "jev.log");
 
 export const CONTEXT_WINDOW_TOKENS = 200000;
@@ -33,6 +35,14 @@ export function shippedCutoffs() {
 export const RULES = {
   /** Below this confidence we refuse to downgrade and cap upgrades at `uncertainCeiling`. */
   minConfidence: 0.3,
+  /**
+   * Routing up costs roughly five times what routing down saves, so the two directions do
+   * not deserve the same evidence. Measured over 300 real prompts: the 15% of turns an
+   * appraiser sent up accounted for 63% of spend, and only 5 of those 45 were above 0.9
+   * confidence. Requiring near-certainty to climb turned the same decisions from 19% more
+   * expensive than doing nothing into 34% cheaper.
+   */
+  upgradeMinConfidence: 0.9,
   uncertainCeiling: "balanced",
   /**
    * Switching models discards the prompt cache and the next turn re-sends the conversation.

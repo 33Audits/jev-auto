@@ -116,6 +116,12 @@ export async function startRelay({
             if (prompt) {
               gradePrevious(state, readsAsRetry(prompt));
 
+              // JEV_PIN meters a session without routing it: the relay still records tokens,
+              // cost, and escalations, but every turn runs on one rung. This is the control
+              // arm a routed run is compared against, and the honest way to measure both —
+              // same accounting path, same overhead, only the decision differs.
+              const pinned = TIER_ORDER.includes(process.env.JEV_PIN) ? process.env.JEV_PIN : null;
+
               const models = accountModels([...catalog.values()], platform).filter((m) =>
                 enabledTiers().includes(m.tier),
               );
@@ -123,7 +129,7 @@ export async function startRelay({
               const contextTokens = wire.weighRequest(body);
               // Wrapped rather than awaited directly: an appraiser may be synchronous (the
               // local one is) and may throw rather than reject. Both mean "keep the rung".
-              const decision = await Promise.resolve()
+              const decision = pinned ? { choice: pinned, confidence: 1, backend: "pinned", shape: "pinned", score: null } : await Promise.resolve()
                 .then(() =>
                   appraise({
                     prompt,

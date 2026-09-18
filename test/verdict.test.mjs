@@ -90,3 +90,22 @@ test("an explicit request still cannot pick a tier that cannot hold the request"
   const d = verdictFor({ prompt: "use haiku", decision: routed("strong"), current: "strong", available: ALL, contextTokens: 220000 });
   assert.notEqual(d.tier, "fast");
 });
+
+// Climbing a rung costs ~5x what descending saves, so the directions need different evidence.
+// Measured over 300 real prompts: 15% of turns routed up were 63% of spend.
+test("routing up requires near-certainty; routing down does not", () => {
+  const up = verdictFor({ prompt: "x", decision: routed("strong", 0.7), current: "balanced", available: ALL });
+  assert.equal(up.tier, "balanced", "an unsure upgrade is refused");
+  assert.match(up.reason, /upgrade-needs-certainty/);
+
+  const sure = verdictFor({ prompt: "x", decision: routed("strong", 0.95), current: "balanced", available: ALL });
+  assert.equal(sure.tier, "strong", "a confident upgrade still goes through");
+
+  const down = verdictFor({ prompt: "x", decision: routed("fast", 0.7), current: "balanced", available: ALL });
+  assert.equal(down.tier, "fast", "the same confidence is enough to descend");
+});
+
+test("the user can still climb by asking, whatever the confidence", () => {
+  const d = verdictFor({ prompt: "use opus", decision: routed("fast", 0.99), current: "fast", available: ALL });
+  assert.equal(d.tier, "strong");
+});

@@ -216,3 +216,15 @@ test("a synchronous router works, and so does one that throws synchronously", as
   assert.equal(res.status, 200);
   assert.notEqual(up.seen.at(-1).body.model, SENTINEL);
 });
+
+test("JEV_PIN meters a session without routing it", async (t) => {
+  process.env.JEV_PIN = "strong";
+  t.after(() => delete process.env.JEV_PIN);
+  const h = await harness({ choice: "fast" });
+  t.after(h.stop);
+  await post(h.base, convo(["anything at all"]));
+  assert.match(h.up.seen.at(-1).body.model, /opus/, "the pinned rung wins over the appraiser");
+  await post(h.base, convo(["anything at all", "next"]));
+  assert.equal(h.ledger[0].tier, "strong");
+  assert.equal(h.ledger[0].backend, "pinned", "still metered, so a control arm is comparable");
+});
