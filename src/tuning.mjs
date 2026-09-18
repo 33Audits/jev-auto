@@ -1,0 +1,77 @@
+// Every tunable in one place. Anything a user might reasonably want to change is here or
+// in an environment variable; nothing is buried in the proxy.
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { LADDER } from "./ladder.mjs";
+
+export const STATE_DIR = join(homedir(), ".jev-auto");
+export const LEDGER_FILE = join(STATE_DIR, "turns.jsonl");
+export const LOG_FILE = join(STATE_DIR, "jev.log");
+
+export const CONTEXT_WINDOW_TOKENS = 200000;
+
+/** How the four metrics combine into one 0..1 difficulty score. */
+export const FACTOR_WEIGHTS = { task: 0.3, reasoning: 0.4, tool: 0.2, context: 0.1 };
+
+/**
+ * Score boundaries between tiers. These are starting points, not beliefs: the calibration
+ * loop moves them based on what actually happened (src/calibrate.mjs). `JEV_THRESHOLDS`
+ * pins them to a fixed pair, which is how you turn calibration off.
+ */
+export const SHIPPED_CUTOFFS = { cheap: 0.28, strong: 0.58 };
+export const MAX_DRIFT = 0.12;
+
+export function shippedCutoffs() {
+  const pinned = process.env.JEV_THRESHOLDS;
+  if (pinned) {
+    const [cheap, strong] = pinned.split(",").map(Number);
+    if (Number.isFinite(cheap) && Number.isFinite(strong) && cheap < strong) return { cheap, strong };
+  }
+  return { ...SHIPPED_CUTOFFS };
+}
+
+export const RULES = {
+  /** Below this confidence we refuse to downgrade and cap upgrades at `uncertainCeiling`. */
+  minConfidence: 0.3,
+  uncertainCeiling: "sonnet",
+  /**
+   * Switching models discards the prompt cache and the next turn re-sends the conversation.
+   * Past roughly this size a downgrade costs more in cache rebuild than it saves in tokens.
+   */
+  downgradeMaxContextTokens: 20000,
+  /**
+   * After the router is caught routing too cheap (the user escalated, or the turn errored),
+   * the conversation holds a floor for this many turns. Without it the router can oscillate
+   * on a conversation that has simply become hard.
+   */
+  escalationStickyTurns: 3,
+};
+
+/** How much evidence the calibrator needs before it will move a boundary. */
+export const CALIBRATION = {
+  minTrials: 25,
+  /** Above this escalation rate a tier is being handed work it cannot do -> route up. */
+  tooCheapRate: 0.15,
+  /** Below this, over twice the evidence, the tier has headroom -> try cheaper. */
+  convergedRate: 0.04,
+  step: 0.03,
+};
+
+export const NETWORK = {
+  /** Per-attempt and total budget for network backends. Local answers in microseconds. */
+  timeoutMs: 1500,
+  deadlineMs: 3000,
+};
+
+/** Phrases that mean the human already decided, checked against the raw prompt. */
+const ALIASES = {
+  haiku: "haiku|fast|cheap",
+  sonnet: "sonnet|balanced|medium",
+  opus: "opus|strong|smart|best",
+  fable: "fable|long",
+};
+
+export const EXPLICIT_REQUESTS = LADDER.map((t) => ({
+  tier: t.name,
+  re: new RegExp(`\\b(?:use|switch to|with|on|route to)\\s+(?:${ALIASES[t.name]})\\b`, "i"),
+}));

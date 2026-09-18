@@ -1,0 +1,17 @@
+{
+  "name": "jev-auto",
+  "version": "1.0.0",
+  "description": "Per-turn model routing for Claude Code. Routes each turn to the cheapest tier that can do it, works with no API key, and calibrates itself from what actually happened.",
+  "type": "module",
+  "bin": { "jev": "bin/jev.mjs" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "prepublishOnly": "npm test"
+  },
+  "files": [".claude/skills", "bin", "src", "README.md"],
+  "keywords": ["claude", "claude-code", "model-routing", "llm-cost", "router", "jev"],
+  "engines": { "node": ">=20.12" },
+  "license": "MIT",
+  "dependencies": {},
+  "publishConfig": { "access": "public" }
+}
