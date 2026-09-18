@@ -1,10 +1,10 @@
 // Renders the one line Claude Code shows at the bottom of the session. Kept out of the
 // executable so it can be tested against the payloads Claude Code actually sends.
-import { LADDER } from "./ladder.mjs";
+import { TIER_ORDER } from "./ladder.mjs";
 
 const DIM = "\x1b[2m";
 const OFF = "\x1b[0m";
-const COLOR = { haiku: "\x1b[32m", sonnet: "\x1b[36m", opus: "\x1b[35m", fable: "\x1b[33m" };
+const COLOR = { fast: "\x1b[32m", balanced: "\x1b[36m", strong: "\x1b[35m", long: "\x1b[33m" };
 
 const dim = (text) => `${DIM}${text}${OFF}`;
 
@@ -35,4 +35,4 @@ export function renderStatusLine(input = {}, status = null) {
   return [routedPart(status, input), dim("·"), dir, dim(`· ${used}% context`)].filter(Boolean).join(" ");
 }
 
-export const TIER_COLORS = Object.fromEntries(LADDER.map((t) => [t.name, COLOR[t.name] ?? ""]));
+export const TIER_COLORS = Object.fromEntries(TIER_ORDER.map((t) => [t, COLOR[t] ?? ""]));

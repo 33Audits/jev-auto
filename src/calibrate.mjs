@@ -46,8 +46,8 @@ export function cutoffs(records) {
     return value;
   };
 
-  cheap = withinDrift(tune("haiku", cheap, 1, "cheap boundary"), SHIPPED_CUTOFFS.cheap);
-  strong = withinDrift(tune("sonnet", strong, 1, "strong boundary"), SHIPPED_CUTOFFS.strong);
+  cheap = withinDrift(tune("fast", cheap, 1, "cheap boundary"), SHIPPED_CUTOFFS.cheap);
+  strong = withinDrift(tune("balanced", strong, 1, "strong boundary"), SHIPPED_CUTOFFS.strong);
   // The boundaries must stay ordered with room between them, whatever the evidence says.
   if (strong - cheap < 0.1) strong = cheap + 0.1;
 

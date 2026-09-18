@@ -2,7 +2,7 @@
 // in an environment variable; nothing is buried in the proxy.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { LADDER } from "./ladder.mjs";
+import { TIER_ORDER } from "./ladder.mjs";
 
 export const STATE_DIR = join(homedir(), ".jev-auto");
 export const LEDGER_FILE = join(STATE_DIR, "turns.jsonl");
@@ -33,7 +33,7 @@ export function shippedCutoffs() {
 export const RULES = {
   /** Below this confidence we refuse to downgrade and cap upgrades at `uncertainCeiling`. */
   minConfidence: 0.3,
-  uncertainCeiling: "sonnet",
+  uncertainCeiling: "balanced",
   /**
    * Switching models discards the prompt cache and the next turn re-sends the conversation.
    * Past roughly this size a downgrade costs more in cache rebuild than it saves in tokens.
@@ -64,14 +64,15 @@ export const NETWORK = {
 };
 
 /** Phrases that mean the human already decided, checked against the raw prompt. */
+// Both platforms' nicknames, so "use opus" and "use sol" mean the same rung.
 const ALIASES = {
-  haiku: "haiku|fast|cheap",
-  sonnet: "sonnet|balanced|medium",
-  opus: "opus|strong|smart|best",
-  fable: "fable|long",
+  fast: "fast|cheap|haiku|luna",
+  balanced: "balanced|medium|sonnet|terra",
+  strong: "strong|smart|best|opus|sol",
+  long: "long|fable|astra",
 };
 
-export const EXPLICIT_REQUESTS = LADDER.map((t) => ({
-  tier: t.name,
-  re: new RegExp(`\\b(?:use|switch to|with|on|route to)\\s+(?:${ALIASES[t.name]})\\b`, "i"),
+export const EXPLICIT_REQUESTS = TIER_ORDER.map((tier) => ({
+  tier,
+  re: new RegExp(`\\b(?:use|switch to|with|on|route to)\\s+(?:${ALIASES[tier]})\\b`, "i"),
 }));

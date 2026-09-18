@@ -5,7 +5,7 @@ import { problemShapes, cutoffs } from "../src/calibrate.mjs";
 
 const turns = (n, over) =>
   Array.from({ length: n }, () => ({
-    t: 1, shape: "hard0/std/files1/mid", tier: "haiku", backend: "local",
+    t: 1, shape: "hard0/std/files1/mid", tier: "fast", backend: "local",
     score: 0.2, conf: 0.8, verdict: "ok", code: null,
     in: 100, out: 50, cacheRead: 0, cacheWrite: 0, ...over,
   }));
@@ -41,8 +41,8 @@ test("no amount of evidence moves a boundary further than the drift cap", () => 
 
 test("the boundaries stay ordered with room between them", () => {
   const t = cutoffs([
-    ...turns(200, { tier: "haiku", verdict: "ok" }),
-    ...turns(200, { tier: "sonnet", verdict: "escalated", code: "redo" }),
+    ...turns(200, { tier: "fast", verdict: "ok" }),
+    ...turns(200, { tier: "balanced", verdict: "escalated", code: "redo" }),
   ]);
   assert.ok(t.strong - t.cheap >= 0.1 - 1e-9);
 });

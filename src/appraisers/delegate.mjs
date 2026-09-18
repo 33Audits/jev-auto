@@ -40,7 +40,7 @@ export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutof
       signal: abort.signal,
       headers: { ...auth, "content-type": "application/json" },
       body: JSON.stringify({
-        model: defaultIdFor("haiku"),
+        model: defaultIdFor("fast"),
         max_tokens: 4,
         temperature: 0,
         messages: [{ role: "user", content: `${QUESTION}${String(prompt).slice(0, 4000)}` }],

@@ -13,7 +13,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { LEDGER_FILE } from "./tuning.mjs";
-import { LADDER, TIER_ORDER, rungFor } from "./ladder.mjs";
+import { PLATFORMS, TIER_ORDER, ladderFor, rungFor } from "./ladder.mjs";
 
 /** Closed vocabulary. Anything outside this list is recorded as `other`. */
 export const REASON_CODES = ["manual_escalate", "prompt_escalate", "redo", "api_error", "other"];
@@ -41,6 +41,7 @@ export function toSchema(r) {
     shape: typeof r.shape === "string" ? r.shape.slice(0, 64) : "unknown",
     tier: TIER_ORDER.includes(r.tier) ? r.tier : "unknown",
     backend: typeof r.backend === "string" ? r.backend.slice(0, 16) : "unknown",
+    platform: r.platform in PLATFORMS ? r.platform : "claude",
     score: Number.isFinite(r.score) ? Number(r.score.toFixed(3)) : null,
     conf: Number.isFinite(r.conf) ? Number(r.conf.toFixed(3)) : null,
     verdict: VERDICTS.includes(r.verdict) ? r.verdict : "ok",
@@ -71,8 +72,8 @@ export function read(file = LEDGER_FILE) {
 }
 
 /** USD for one record, at the tier it actually ran on. */
-export function costOf(record, tier = record.tier) {
-  const spec = rungFor(tier);
+export function costOf(record, tier = record.tier, platform = record.platform ?? "claude") {
+  const spec = rungFor(tier, platform);
   if (!spec) return 0;
   // Cache reads bill at a tenth of input; cache writes at 1.25x. Close enough for a
   // savings estimate, and the only numbers that would make it exact are on the invoice.
@@ -88,7 +89,7 @@ export function costOf(record, tier = record.tier) {
  * the honest comparison, since that is what a user routes away from.
  */
 export function stats(records = read()) {
-  const strongest = LADDER.filter((t) => t.name !== "fable").at(-1).name;
+  const strongest = "strong";
   const byTier = {};
   const byShape = {};
   let spend = 0;
@@ -97,7 +98,7 @@ export function stats(records = read()) {
   for (const r of records) {
     const cost = costOf(r);
     spend += cost;
-    baseline += costOf(r, strongest);
+    baseline += costOf(r, strongest, r.platform);
 
     const t = (byTier[r.tier] ??= { turns: 0, escalated: 0, tokensIn: 0, tokensOut: 0, spend: 0 });
     t.turns++;

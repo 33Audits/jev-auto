@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SENTINEL } from "./ladder.mjs";
 import { startRelay } from "./relay.mjs";
+import { wire as codexWire } from "./wire-codex.mjs";
 import { savedChoice, undoSentinel } from "./picker.mjs";
 import { appraiserName } from "./appraisers/index.mjs";
 import { LOG_FILE } from "./diag.mjs";
@@ -124,6 +125,59 @@ export async function runClaude(args) {
 
   child.on("error", (err) => {
     process.stderr.write(err.code === "ENOENT" ? NOT_INSTALLED : `[jev] could not start Claude Code: ${err.message}\n`);
+    process.exit(1);
+  });
+  child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));
+}
+
+
+/**
+ * Launch Codex with routing in front of it.
+ *
+ * Codex validates models server-side, so the sentinel must never reach OpenAI — the relay
+ * rewrites it first. It is registered as a temporary provider on the command line rather
+ * than written into ~/.codex/config.toml, so nothing about the user's install is modified
+ * and an interrupted session leaves no trace. `requires_openai_auth` makes Codex attach the
+ * credentials from its own `codex login`; the relay forwards them without reading them.
+ */
+export async function runCodex(args) {
+  loadEnvFiles();
+
+  const argv = [...args];
+  const env = { ...process.env };
+
+  if (process.env.JEV_ROUTER === "off") {
+    process.stderr.write("[jev] JEV_ROUTER=off — starting Codex without routing\n");
+  } else {
+    const { port, close, cutoffs } = await startRelay({ wire: codexWire });
+    argv.unshift(
+      "-c", `model_providers.jevauto.name="Jev Auto"`,
+      "-c", `model_providers.jevauto.base_url="http://127.0.0.1:${port}"`,
+      "-c", `model_providers.jevauto.requires_openai_auth=true`,
+      "-c", `model_provider="jevauto"`,
+      "-c", `model="${SENTINEL}"`,
+    );
+    process.on("exit", close);
+    if (process.env.JEV_DEBUG && process.stdout.isTTY) {
+      process.stderr.write(
+        `[jev] codex backend=${backendName()} cutoffs=${cutoffs.cheap}/${cutoffs.strong} log=${LOG_FILE}\n`,
+      );
+    }
+  }
+
+  const child = spawn("codex", WINDOWS ? argv.map((a) => (/\s/.test(a) ? `"${a}"` : a)) : argv, {
+    stdio: "inherit",
+    shell: WINDOWS,
+    env,
+  });
+  child.on("error", (err) => {
+    process.stderr.write(
+      err.code === "ENOENT"
+        ? "[jev] Codex is not installed, or `codex` is not on your PATH.\n" +
+            "[jev] jev runs the real Codex CLI; install it first:\n" +
+            "[jev]   https://developers.openai.com/codex/cli\n"
+        : `[jev] could not start Codex: ${err.message}\n`,
+    );
     process.exit(1);
   });
   child.on("exit", (code, signal) => process.exit(signal ? 1 : (code ?? 0)));

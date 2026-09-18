@@ -12,15 +12,15 @@ const journalFor = (id) => join(DIR, `${id}.jsonl`);
 test("the latest decision is what a reader sees", () => {
   const id = session();
   assert.equal(latestDecision(id), null, "a session with no decisions yet reads as nothing");
-  recordDecision(id, { tier: "haiku", confidence: 0.9 });
-  recordDecision(id, { tier: "opus", confidence: 0.8 });
-  assert.equal(latestDecision(id).tier, "opus");
+  recordDecision(id, { tier: "fast", confidence: 0.9 });
+  recordDecision(id, { tier: "strong", confidence: 0.8 });
+  assert.equal(latestDecision(id).tier, "strong");
   assert.equal(latestDecision(id).history.length, 2);
 });
 
 test("history is bounded, keeping the most recent", () => {
   const id = session();
-  for (let i = 0; i < 40; i++) recordDecision(id, { tier: "haiku", seq: i });
+  for (let i = 0; i < 40; i++) recordDecision(id, { tier: "fast", seq: i });
   const history = decisionHistory(id);
   assert.equal(history.length, 20);
   assert.equal(history.at(-1).seq, 39);
@@ -28,7 +28,7 @@ test("history is bounded, keeping the most recent", () => {
 
 test("taking manual control replaces the history rather than appending to it", () => {
   const id = session();
-  recordDecision(id, { tier: "haiku" });
+  recordDecision(id, { tier: "fast" });
   recordManual(id, "claude-opus-5");
   const status = latestDecision(id);
   assert.equal(status.manual, true);
@@ -38,41 +38,41 @@ test("taking manual control replaces the history rather than appending to it", (
 
 test("a line truncated by a killed session costs one line, not the file", () => {
   const id = session();
-  recordDecision(id, { tier: "haiku" });
+  recordDecision(id, { tier: "fast" });
   appendFileSync(journalFor(id), '{"tier":"son');
-  recordDecision(id, { tier: "opus" });
+  recordDecision(id, { tier: "strong" });
   assert.equal(decisionHistory(id).length, 2);
-  assert.equal(latestDecision(id).tier, "opus");
+  assert.equal(latestDecision(id).tier, "strong");
 });
 
 test("concurrent writers do not overwrite each other", () => {
   const id = session();
-  for (let i = 0; i < 5; i++) recordDecision(id, { tier: "haiku", seq: i });
+  for (let i = 0; i < 5; i++) recordDecision(id, { tier: "fast", seq: i });
   assert.deepEqual(decisionHistory(id).map((d) => d.seq), [0, 1, 2, 3, 4], "every write survives, in order");
   assert.ok(readFileSync(journalFor(id), "utf8").includes('"seq":0'), "the first write is still on disk");
 });
 
 test("an unnamed session is a no-op, not a crash", () => {
-  recordDecision("", { tier: "haiku" });
-  recordDecision(undefined, { tier: "haiku" });
+  recordDecision("", { tier: "fast" });
+  recordDecision(undefined, { tier: "fast" });
   assert.equal(latestDecision(undefined), null);
 });
 
 test("the status line names the tier, the directory, and the context used", () => {
   const line = renderStatusLine(
     { workspace: { current_dir: "/home/me/my-project" }, context_window: { used_percentage: 8.4 } },
-    { tier: "haiku", confidence: 0.94, reason: "routed" },
+    { tier: "fast", confidence: 0.94, reason: "routed" },
   );
-  assert.match(line, /haiku/);
+  assert.match(line, /fast/);
   assert.match(line, /p=0\.94/);
   assert.match(line, /my-project/);
   assert.match(line, /8% context/);
 });
 
 test("the status line explains itself only when routing declined the obvious thing", () => {
-  const plain = renderStatusLine({}, { tier: "haiku", confidence: 0.9, reason: "routed" });
+  const plain = renderStatusLine({}, { tier: "fast", confidence: 0.9, reason: "routed" });
   assert.ok(!plain.includes("("), "the common case stays short");
-  const held = renderStatusLine({}, { tier: "sonnet", confidence: 0.6, reason: "routed+context-too-large/no-change" });
+  const held = renderStatusLine({}, { tier: "balanced", confidence: 0.6, reason: "routed+context-too-large/no-change" });
   assert.match(held, /context-too-large/);
 });
 

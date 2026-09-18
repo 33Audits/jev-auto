@@ -35,12 +35,12 @@ test("help lists the subcommands", () => {
 test("try scores a prompt without running anything", () => {
   const { status, stdout } = run("try", "why does the withdrawal path intermittently revert under concurrent load?");
   assert.equal(status, 0);
-  assert.match(stdout, /opus/);
+  assert.match(stdout, /strong/);
   assert.match(stdout, /dry run/);
 });
 
 test("try routes mechanical work to the cheapest tier", () => {
-  assert.match(run("try", "rename the foo variable to bar").stdout, /haiku/);
+  assert.match(run("try", "rename the foo variable to bar").stdout, /fast/);
 });
 
 test("try without a prompt explains itself instead of crashing", () => {

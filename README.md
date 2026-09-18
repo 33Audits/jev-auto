@@ -1,33 +1,56 @@
 # jev-auto
 
-Per-turn model routing for Claude Code. Every turn goes to the cheapest tier that can
-actually do it — and the router keeps a ledger of what happened next, so it gets better at
-that judgement instead of staying wrong in the same way forever.
+Per-turn model routing for **Claude Code and OpenAI Codex**, on the accounts you already
+have. Every turn goes to the cheapest tier that can actually do it, and the router keeps a
+ledger of what happened next, so it gets better at that judgement instead of staying wrong
+in the same way forever.
 
 ```bash
 npm install -g jev-auto
-jev
+
+jev              # Claude Code, routed
+jev codex        # OpenAI Codex, routed
 ```
 
-That is the whole setup. No API key, no account, no config file, no signup.
+That is the whole setup. No API key, no account, no config file, no signup — it rides your
+existing `claude login` / `codex login`.
 
 ```text
-haiku p=0.94 · my-project · 8% context
+fast p=0.94 · my-project · 8% context
 ```
 
 ---
 
 ## What it does
 
-`jev` launches the real Claude Code CLI behind a loopback proxy. Your login, tools,
-permissions, keybindings, `/compact`, `/resume`, MCP servers and sessions are untouched —
-the only thing the proxy changes in a request is which model it names.
+`jev` launches the real CLI behind a loopback relay. Your login, tools, permissions,
+keybindings, `/compact`, `/resume`, MCP servers and sessions are untouched — the only thing
+the relay changes in a request is which model it names.
 
 ```text
-you -> Claude Code -> jev proxy -> Anthropic
+you -> Claude Code -> jev relay -> Anthropic
+you -> Codex       -> jev relay -> OpenAI
                          |
                          +-> which tier should serve this turn?
 ```
+
+| command | CLI | authentication | model picker |
+| --- | --- | --- | --- |
+| `jev` | Claude Code | your existing `claude login` | **Jev Auto** in `/model` |
+| `jev codex` | OpenAI Codex | your existing `codex login` | temporary `jevauto` provider |
+
+Tiers are abstract, so one decision serves both:
+
+| tier | Claude Code | Codex |
+| --- | --- | --- |
+| `fast` | Haiku | `gpt-5.6-luna` |
+| `balanced` | Sonnet | `gpt-5.6-terra` |
+| `strong` | Opus | `gpt-5.6-sol` |
+| `long` (opt-in) | Fable | `gpt-6-astra` |
+
+Codex support registers its provider on the command line rather than editing
+`~/.codex/config.toml`, so nothing about your install is modified and an interrupted session
+leaves no trace.
 
 One decision per fresh user turn. Tool-loop continuations keep the tier the turn started on,
 so the model never flips mid-task. The main conversation and every sub-agent are pinned
@@ -244,8 +267,8 @@ modifying them, and there is a test that asserts it.
 
 ## Limitations
 
-- Claude Code only. The request-shape layer is isolated in `src/wire.mjs`, which is the seam
-  another CLI would plug into, but Codex is not supported today.
+- Two CLIs, verified against Claude Code 2.1.263 and Codex 0.154.0. A third would be a third
+  adapter next to `src/wire.mjs` and `src/wire-codex.mjs`; nothing else would change.
 - Claude Code's request format is not a public contract. `JEV_DUMP` exists for when it moves.
 - Prices in `src/tiers.mjs` are a display default for the savings estimate, not a billing
   source of truth.
@@ -257,7 +280,8 @@ modifying them, and there is a test that asserts it.
 | | |
 | --- | --- |
 | `src/relay.mjs` | the loopback proxy: one decision per fresh turn, rewrite, forward |
-| `src/wire.mjs` | everything that knows Claude Code's request shape |
+| `src/wire.mjs` | Claude Code's Messages shape |
+| `src/wire-codex.mjs` | Codex's Responses shape — the only file that differs per CLI |
 | `src/appraisers/` | who answers "how hard is this turn": `heuristic`, `delegate`, `typesafe` |
 | `src/verdict.mjs` | turns an appraisal plus the constraints into the tier that actually runs |
 | `src/ladder.mjs` | the tiers, their capabilities, prices, and context windows |
@@ -270,12 +294,12 @@ modifying them, and there is a test that asserts it.
 
 ```bash
 npm install
-npm test          # 112 tests, no network, no API key
+npm test          # 126 tests, no network, no API key
 node bin/jev.mjs doctor
 node bin/jev.mjs try "refactor the auth middleware"
 ```
 
-The suite covers the scorer's tier assignments and monotonicity, every policy branch,
+The suite covers both wire adapters against real captured request bodies, the scorer's tier assignments and monotonicity, every policy branch,
 ledger privacy and cost math, calibration gates and drift caps, request-shape parsing
 against real Claude Code bodies, and the proxy end-to-end against a stand-in API —
 including that a synchronous router, a throwing router, an unreachable upstream, and a

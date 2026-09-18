@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  weighRequest, threadKey, readsAsRetry, freshTurnText, normalizeToolSchema, sessionIdOf, meterFrom,
-} from "../src/wire.mjs";
+import { wire, normalizeToolSchema, readsAsRetry, meterFrom } from "../src/wire.mjs";
+
+const { weighRequest, freshTurnText, sessionIdOf } = wire;
+const threadKey = (b) => wire.threadKey(b);
 
 const agentTurn = (content) => ({ tools: [{ name: "Read" }], messages: [{ role: "user", content }] });
 

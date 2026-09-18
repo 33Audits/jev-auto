@@ -17,7 +17,7 @@ export function explicitRequest(prompt) {
 function nearestRunnable(tier, available) {
   if (available.includes(tier)) return tier;
   const rank = heightOf(tier);
-  const up = TIER_ORDER.filter((t, i) => i > rank && available.includes(t) && (t !== "fable" || tier === "fable"));
+  const up = TIER_ORDER.filter((t, i) => i > rank && available.includes(t) && (t !== "long" || tier === "long"));
   if (up.length) return up[0];
   const down = TIER_ORDER.filter((t, i) => i < rank && available.includes(t));
   return down.at(-1) ?? null;
@@ -32,11 +32,12 @@ function nearestRunnable(tier, available) {
  * @param {number}   input.contextTokens approximate conversation size
  * @param {boolean}  input.hasCache      whether a prompt cache has actually been built yet
  * @param {?string}  input.floor         sticky floor from a recent escalation, or null
+ * @param {string}   input.platform      which ladder the rung names refer to
  * @returns {{tier: string, reason: string, changed: boolean}}
  */
-export function verdictFor({ prompt, decision, current, available, contextTokens = 0, hasCache = false, floor = null }) {
+export function verdictFor({ prompt, decision, current, available, contextTokens = 0, hasCache = false, floor = null, platform = "claude" }) {
   // A tier that cannot hold the conversation is not a choice, whoever picked it.
-  const roomy = available.filter((t) => canHold(t, contextTokens));
+  const roomy = available.filter((t) => canHold(t, contextTokens, platform));
   const usable = roomy.length ? roomy : available;
 
   const conclude = (tier, reason) => {
@@ -48,7 +49,7 @@ export function verdictFor({ prompt, decision, current, available, contextTokens
       target = floor;
       why = `${reason}+escalation-floor`;
     }
-    if (!canHold(target, contextTokens)) {
+    if (!canHold(target, contextTokens, platform)) {
       target = nearestRunnable(target, usable) ?? target;
       why = `${why}+context-too-large`;
     }

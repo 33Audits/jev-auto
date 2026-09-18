@@ -10,9 +10,9 @@ import { appraise as appraiseLocally } from "./heuristic.mjs";
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 
 const CRITERIA = {
-  haiku: "Trivial, mechanical, or purely factual work. Not for design judgement or multi-file reasoning.",
-  sonnet: "Ordinary engineering with a clear, bounded shape. Not for open-ended architecture or unknown-cause debugging.",
-  opus: "Hard reasoning, ambiguity, or high blast radius: debugging, cross-module design, security, concurrency, migrations.",
+  fast: "Trivial, mechanical, or purely factual work. Not for design judgement or multi-file reasoning.",
+  balanced: "Ordinary engineering with a clear, bounded shape. Not for open-ended architecture or unknown-cause debugging.",
+  strong: "Hard reasoning, ambiguity, or high blast radius: debugging, cross-module design, security, concurrency, migrations.",
 };
 
 export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutoffs }) {

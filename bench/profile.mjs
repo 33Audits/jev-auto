@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { appraise } from "../src/appraisers/heuristic.mjs";
 import { shippedCutoffs } from "../src/tuning.mjs";
-import { LADDER } from "../src/ladder.mjs";
+import { ladderFor } from "../src/ladder.mjs";
 import { alwaysOpus, alwaysSonnet, lengthOnly, randomMatched, ours } from "./baselines.mjs";
 
 const corpus = readFileSync(process.argv[2] ?? "bench/corpus.jsonl", "utf8")
@@ -30,7 +30,7 @@ const share = Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, v / cor
 // given the same tier mix and the comparison isolates "does the scorer read anything else".
 const lengths = corpus.map((r) => r.text.length).sort((a, b) => a - b);
 const q = (p) => lengths[Math.floor(p * (lengths.length - 1))];
-const quantiles = { cheap: q(share.haiku ?? 0), strong: q((share.haiku ?? 0) + (share.sonnet ?? 0)) };
+const quantiles = { cheap: q(share.fast ?? 0), strong: q((share.fast ?? 0) + (share.balanced ?? 0)) };
 
 const ROUTERS = {
   ours,
@@ -54,12 +54,12 @@ for (const [name, list] of Object.entries(out)) {
   const m = {};
   for (const d of list) m[d] = (m[d] ?? 0) + 1;
   console.log(
-    `    ${name.padEnd(14)} ${["haiku", "sonnet", "opus"].map((t) => `${t} ${pct((m[t] ?? 0) / corpus.length).padStart(6)}`).join("   ")}`,
+    `    ${name.padEnd(14)} ${["fast", "balanced", "strong"].map((t) => `${t} ${pct((m[t] ?? 0) / corpus.length).padStart(6)}`).join("   ")}`,
   );
 }
 
 // Raw agreement is misleading when one tier holds most of the mass: two routers that both
-// say "sonnet" almost always will agree almost always, having decided nothing. Cohen's kappa
+// say "balanced" almost always will agree almost always, having decided nothing. Cohen's kappa
 // subtracts the agreement you would get by chance at these base rates.
 // 0 = no information beyond the tier mix. 1 = identical decisions.
 const kappa = (a, b) => {
@@ -82,7 +82,7 @@ for (const name of ["lengthOnly", "randomMatched", "alwaysSonnet", "alwaysOpus"]
 // Relative spend, holding tokens per prompt equal across tiers. Crude, but it answers the
 // only question that matters: against the baseline a sensible user actually runs, does
 // routing cost less or more?
-const PRICE = Object.fromEntries(LADDER.map((t) => [t.name, (t.in + t.out) / 2]));
+const PRICE = Object.fromEntries(ladderFor("claude").map((r) => [r.tier, (r.in + r.out) / 2]));
 const spend = (list) => list.reduce((sum, t) => sum + PRICE[t], 0) / list.length;
 console.log("\n  relative spend (equal tokens per prompt)");
 const sonnetSpend = spend(out.alwaysSonnet);

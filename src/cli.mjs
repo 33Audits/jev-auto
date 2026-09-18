@@ -7,10 +7,10 @@ import { cutoffs as calibratedThresholds, problemShapes } from "./calibrate.mjs"
 import { renderDecision } from "./report.mjs";
 import { latestDecision, DIR as SESSION_DIR } from "./journal.mjs";
 import { spawnSync } from "node:child_process";
-import { hasOwnStatusLine, runClaude, loadEnvFiles } from "./runner.mjs";
+import { hasOwnStatusLine, runClaude, runCodex, loadEnvFiles } from "./runner.mjs";
 import { appraiserName } from "./appraisers/index.mjs";
 import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
-import { LADDER } from "./ladder.mjs";
+import { TIER_ORDER } from "./ladder.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
 const out = (s) => process.stdout.write(`${s}\n`);
@@ -27,6 +27,7 @@ const version = () => {
 const HELP = `jev — per-turn model routing for Claude Code
 
   jev [claude args...]   Launch Claude Code with routing (this is the whole setup)
+  jev codex [args...]    Launch OpenAI Codex with routing, on your existing codex login
   jev stats              What routing has cost, saved, and learned
   jev why [session-id]   The last routing decision, in full
   jev try "<prompt>"     Show where a prompt would appraise, without running anything
@@ -59,7 +60,7 @@ function cmdStats() {
   out(`  Saved        ${usd(s.saved)}  (${Math.round(s.savedPct * 100)}%)\n`);
 
   out("  tier      turns   escalated   spend");
-  for (const { name } of LADDER) {
+  for (const name of TIER_ORDER) {
     const row = s.byTier[name];
     if (!row) continue;
     out(
@@ -195,6 +196,8 @@ export async function main(argv = process.argv.slice(2)) {
       return out(version());
     case "claude":
       return runClaude(rest);
+    case "codex":
+      return runCodex(rest);
     default:
       // Everything else is Claude Code's, forwarded untouched: `jev --resume`, `jev -p "..."`.
       return runClaude(argv);

@@ -3,9 +3,9 @@
 // that only reads prompt length is a regex suit over a character count.
 import { appraise } from "../src/appraisers/heuristic.mjs";
 
-export const alwaysHaiku = () => ({ choice: "haiku" });
-export const alwaysSonnet = () => ({ choice: "sonnet" });
-export const alwaysOpus = () => ({ choice: "opus" });
+export const alwaysHaiku = () => ({ choice: "fast" });
+export const alwaysSonnet = () => ({ choice: "balanced" });
+export const alwaysOpus = () => ({ choice: "strong" });
 
 /**
  * Length alone, with cutoffs chosen so its tier mix matches the router under test. Matching
@@ -15,7 +15,7 @@ export const alwaysOpus = () => ({ choice: "opus" });
 export function lengthOnly(quantiles) {
   return ({ prompt }) => {
     const n = String(prompt ?? "").length;
-    return { choice: n < quantiles.cheap ? "haiku" : n < quantiles.strong ? "sonnet" : "opus" };
+    return { choice: n < quantiles.cheap ? "fast" : n < quantiles.strong ? "balanced" : "strong" };
   };
 }
 

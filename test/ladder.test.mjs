@@ -1,18 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SENTINEL, retarget, accountModels, canHold, isSentinel, modelIdFor, heightOf, tierOfModel } from "../src/ladder.mjs";
+import { SENTINEL, accountModels, canHold, isSentinel, modelIdFor, heightOf, tierOfModel } from "../src/ladder.mjs";
+import { wire } from "../src/wire.mjs";
+
+const retarget = (body, tier, id) => wire.retarget(body, tier, id);
 
 test("older model versions inside a tier are still recognised", () => {
-  assert.equal(tierOfModel("claude-sonnet-4-6"), "sonnet");
-  assert.equal(tierOfModel("claude-opus-4-8"), "opus");
-  assert.equal(tierOfModel("claude-haiku-4-5-20251001"), "haiku");
+  assert.equal(tierOfModel("claude-sonnet-4-6"), "balanced");
+  assert.equal(tierOfModel("claude-opus-4-8"), "strong");
+  assert.equal(tierOfModel("claude-haiku-4-5-20251001"), "fast");
   assert.equal(tierOfModel("gpt-9"), null);
   assert.equal(tierOfModel(undefined), null);
 });
 
 test("tiers are ordered cheapest first", () => {
-  assert.ok(heightOf("haiku") < heightOf("sonnet"));
-  assert.ok(heightOf("sonnet") < heightOf("opus"));
+  assert.ok(heightOf("fast") < heightOf("balanced"));
+  assert.ok(heightOf("balanced") < heightOf("strong"));
 });
 
 test("only the sentinel means route this", () => {
@@ -29,7 +32,7 @@ test("an unknown tier leaves the body alone rather than corrupting it", () => {
 
 test("a tier that supports thinking keeps it", () => {
   const body = { thinking: { type: "adaptive" }, output_config: { effort: "high" } };
-  retarget(body, "opus");
+  retarget(body, "strong");
   assert.deepEqual(body.thinking, { type: "adaptive" });
   assert.equal(body.output_config.effort, "high");
 });
@@ -39,8 +42,8 @@ test("the account catalog is preferred, with static ids as the cold-start fallba
   assert.ok(empty.length >= 3);
   const live = accountModels([{ id: "claude-sonnet-4-6", display_name: "Sonnet 4.6" }, { id: "gpt-9" }]);
   assert.deepEqual(live.map((m) => m.id), ["claude-sonnet-4-6"]);
-  assert.equal(modelIdFor(live, "sonnet"), "claude-sonnet-4-6");
-  assert.match(modelIdFor(live, "opus"), /opus/, "a tier missing from the catalog falls back to a static id");
+  assert.equal(modelIdFor(live, "balanced"), "claude-sonnet-4-6");
+  assert.match(modelIdFor(live, "strong"), /opus/, "a tier missing from the catalog falls back to a static id");
 });
 
 test("hook system messages are folded into the user turn for tiers that reject them", () => {
@@ -50,7 +53,7 @@ test("hook system messages are folded into the user turn for tiers that reject t
       { role: "system", content: [{ type: "text", text: "hook output" }] },
     ],
   };
-  retarget(body, "haiku");
+  retarget(body, "fast");
   assert.equal(body.messages.length, 1);
   assert.equal(body.messages[0].role, "user");
   assert.deepEqual(body.messages[0].content, [{ type: "text", text: "fix it" }, { type: "text", text: "hook output" }]);
@@ -58,20 +61,20 @@ test("hook system messages are folded into the user turn for tiers that reject t
 
 test("hook output is never silently dropped, even with no user turn to fold it into", () => {
   const body = { messages: [{ role: "system", content: "hook output" }] };
-  retarget(body, "haiku");
+  retarget(body, "fast");
   assert.equal(body.messages[0].role, "user");
   assert.deepEqual(body.messages[0].content, [{ type: "text", text: "hook output" }]);
 });
 
 test("tiers that accept system messages keep them untouched", () => {
   const body = { messages: [{ role: "user", content: "fix it" }, { role: "system", content: "hook" }] };
-  retarget(body, "opus");
+  retarget(body, "strong");
   assert.equal(body.messages.length, 2);
   assert.equal(body.messages[1].role, "system");
 });
 
 test("a tier that cannot hold the conversation is not a candidate", () => {
-  assert.ok(canHold("haiku", 100000));
-  assert.ok(!canHold("haiku", 220000));
-  assert.ok(canHold("opus", 220000));
+  assert.ok(canHold("fast", 100000));
+  assert.ok(!canHold("fast", 220000));
+  assert.ok(canHold("strong", 220000));
 });

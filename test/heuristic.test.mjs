@@ -12,7 +12,7 @@ test("mechanical work goes to the cheapest tier", () => {
     "what does this function return?",
     "reformat src/app.ts",
   ]) {
-    assert.equal(at(p), "haiku", p);
+    assert.equal(at(p), "fast", p);
   }
 });
 
@@ -22,7 +22,7 @@ test("ordinary bounded engineering goes to the middle tier", () => {
     "implement the retry helper with exponential backoff",
     "fix the off-by-one in the pagination cursor",
   ]) {
-    assert.equal(at(p), "sonnet", p);
+    assert.equal(at(p), "balanced", p);
   }
 });
 
@@ -32,7 +32,7 @@ test("ambiguity, debugging, and blast radius go to the strongest tier", () => {
     "investigate the flaky CI failure in test/e2e and figure out the root cause",
     "design the migration from the single-tenant schema to per-tenant databases including the rollback plan",
   ]) {
-    assert.equal(at(p), "opus", p);
+    assert.equal(at(p), "strong", p);
   }
 });
 
@@ -75,8 +75,8 @@ test("confidence is highest far from a boundary", () => {
 
 test("moving a boundary moves the decision", () => {
   const prompt = "add a test for parseConfig in src/config.ts";
-  assert.equal(appraise({ prompt, cutoffs: { cheap: 0.28, strong: 0.58 } }).choice, "sonnet");
-  assert.equal(appraise({ prompt, cutoffs: { cheap: 0.5, strong: 0.8 } }).choice, "haiku");
+  assert.equal(appraise({ prompt, cutoffs: { cheap: 0.28, strong: 0.58 } }).choice, "balanced");
+  assert.equal(appraise({ prompt, cutoffs: { cheap: 0.5, strong: 0.8 } }).choice, "fast");
 });
 
 test("an empty prompt does not throw", () => {

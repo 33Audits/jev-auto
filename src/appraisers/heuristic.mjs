@@ -128,7 +128,7 @@ export function appraise({ prompt, contextTokens = 0, toolCount = 0, cutoffs = s
   const metrics = factorsOf(f);
   const score = difficultyOf(metrics);
   const { cheap, strong } = cutoffs;
-  const choice = score < cheap ? "haiku" : score < strong ? "sonnet" : "opus";
+  const choice = score < cheap ? "fast" : score < strong ? "balanced" : "strong";
   // Confidence is distance from whichever boundary this score is nearest: a request sitting
   // right on a boundary genuinely could go either way, and the policy layer is built to
   // refuse downgrades on exactly that signal.

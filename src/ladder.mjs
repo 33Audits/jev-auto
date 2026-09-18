@@ -1,121 +1,72 @@
-// The model catalog and everything that depends on which tier a request is pointed at.
-// One file so the whole cost/capability model is reviewable at a glance.
+// The cost ladder, and everything that depends on which rung a request is pointed at.
+//
+// Tiers are abstract — `fast`, `balanced`, `strong`, `long` — because the same decision has
+// to serve two CLIs with different catalogs. An appraiser answers "how hard is this turn",
+// never "which model": the platform decides what `strong` is called this week.
+
+/** Rungs, cheapest first. The vocabulary every appraiser, rule, and report speaks. */
+export const TIER_ORDER = ["fast", "balanced", "strong", "long"];
+export const heightOf = (tier) => TIER_ORDER.indexOf(tier);
 
 /**
- * Tiers, cheapest first.
- *
- * `id`      goes into the API request body.
- * `family`  substring used to recognise whatever model the CLI asked for, which may be an
- *           older version inside the same tier (`claude-sonnet-4-6` is still `sonnet`).
- * `thinking`/`effort` come from the model catalog: Haiku accepts neither, so those request
- *           fields have to be stripped when routing down to it.
- * `system`  whether the tier accepts `role: "system"` entries inside `messages`. Hooks and
- *           plugins append those; Haiku rejects the request outright.
- * `window`  usable context. Routing a 300k-token conversation down to a 200k model is a
- *           hard 400, so the policy layer refuses a tier that cannot hold the request.
- * `in`/`out` are USD per million tokens, used only for the savings ledger. They are a
- *           display default, not a billing source of truth — override with JEV_PRICES.
+ * `family`  substring that recognises whatever model the CLI asked for, including older
+ *           versions inside the same rung (`claude-sonnet-4-6` is still `balanced`).
+ * `think`   whether the rung accepts a thinking/reasoning block. Sending one to a rung that
+ *           does not is a hard 400, so it is stripped on the way down.
+ * `system`  whether the rung accepts `role: "system"` entries inside the conversation.
+ * `window`  usable context. Routing a 300k-token conversation onto a 200k model is a 400.
+ * `in`/`out` USD per million tokens, for the savings ledger only. A display default, not a
+ *           billing source of truth.
  */
-export const LADDER = [
-  { name: "haiku", id: "claude-haiku-4-5-20251001", family: "haiku", thinking: false, effort: false, system: false, window: 200000, in: 1, out: 5 },
-  { name: "sonnet", id: "claude-sonnet-5", family: "sonnet", thinking: true, effort: true, system: true, window: 1000000, in: 3, out: 15 },
-  { name: "opus", id: "claude-opus-5", family: "opus", thinking: true, effort: true, system: true, window: 1000000, in: 15, out: 75 },
-  { name: "fable", id: "claude-fable-5-1", family: "fable", thinking: true, effort: true, system: true, window: 1000000, in: 15, out: 75 },
+const CLAUDE = [
+  { tier: "fast", id: "claude-haiku-4-5-20251001", family: "haiku", think: false, effort: false, system: false, window: 200000, in: 1, out: 5 },
+  { tier: "balanced", id: "claude-sonnet-5", family: "sonnet", think: true, effort: true, system: true, window: 1000000, in: 3, out: 15 },
+  { tier: "strong", id: "claude-opus-5", family: "opus", think: true, effort: true, system: true, window: 1000000, in: 15, out: 75 },
+  { tier: "long", id: "claude-fable-5-1", family: "fable", think: true, effort: true, system: true, window: 1000000, in: 15, out: 75 },
 ];
 
-export const TIER_ORDER = LADDER.map((t) => t.name);
-export const heightOf = (name) => TIER_ORDER.indexOf(name);
-export const rungFor = (name) => LADDER.find((t) => t.name === name);
-export const defaultIdFor = (name) => rungFor(name)?.id;
-
-/** Tier name for a model string the CLI sent, or null when unrecognised. */
-export const tierOfModel = (model) =>
-  LADDER.find((t) => typeof model === "string" && model.includes(t.family))?.name ?? null;
+// Verified against the live catalog this account can reach
+// (GET /backend-api/codex/models), not assumed. All four report a 272k window.
+const CODEX = [
+  { tier: "fast", id: "gpt-5.6-luna", family: "luna", think: true, effort: true, system: true, window: 272000, in: 1, out: 5 },
+  { tier: "balanced", id: "gpt-5.6-terra", family: "terra", think: true, effort: true, system: true, window: 272000, in: 3, out: 15 },
+  { tier: "strong", id: "gpt-5.6-sol", family: "sol", think: true, effort: true, system: true, window: 272000, in: 15, out: 75 },
+  { tier: "long", id: "gpt-6-astra", family: "astra", think: true, effort: true, system: true, window: 272000, in: 15, out: 75 },
+];
 
 /**
- * Sentinel offered as an extra row in the CLI's /model picker. Claude Code forwards it
- * verbatim because it does not validate model names behind a custom base URL, which is
- * exactly what lets the proxy tell "route this turn" apart from "the user picked a model".
+ * The sentinel each CLI is told to offer. It is not a real model: the CLI forwards it
+ * verbatim because a custom base URL turns off client-side model validation, which is what
+ * lets the relay tell "route this turn" from "the user picked a model themselves".
  */
 export const SENTINEL = "jev-auto";
 export const isSentinel = (model) => model === SENTINEL;
 
-/** Fable bills extra usage credits, so it stays opt-in. */
+export const PLATFORMS = { claude: CLAUDE, codex: CODEX };
+
+export const ladderFor = (platform = "claude") => PLATFORMS[platform] ?? CLAUDE;
+
+export const rungFor = (tier, platform) => ladderFor(platform).find((r) => r.tier === tier);
+export const defaultIdFor = (tier, platform) => rungFor(tier, platform)?.id;
+
+/** Rung a model string belongs to, or null when unrecognised. */
+export const tierOfModel = (model, platform) =>
+  ladderFor(platform).find((r) => typeof model === "string" && model.includes(r.family))?.tier ?? null;
+
+/** The long rung bills extra usage credits everywhere, so it stays opt-in. */
 export const enabledTiers = () =>
-  TIER_ORDER.filter((n) => n !== "fable" || process.env.JEV_ALLOW_FABLE === "1");
+  TIER_ORDER.filter((t) => t !== "long" || process.env.JEV_ALLOW_FABLE === "1" || process.env.JEV_ALLOW_LONG === "1");
 
-/**
- * Points a request body at a tier, dropping fields that tier cannot accept. The CLI
- * composes the body for whatever model it believes it is talking to, so downgrading to
- * Haiku while leaving `thinking: {type:"adaptive"}` in place is a hard 400.
- */
-export function retarget(body, tierName, model = defaultIdFor(tierName)) {
-  const tier = rungFor(tierName);
-  if (!tier) return body;
-  body.model = model;
-  if (!tier.thinking) {
-    delete body.thinking;
-    // A context-management strategy that prunes thinking blocks is itself rejected once
-    // thinking is gone, so it has to go with it.
-    const edits = body.context_management?.edits;
-    if (Array.isArray(edits)) {
-      body.context_management.edits = edits.filter((e) => !/thinking/i.test(e?.type ?? ""));
-      if (!body.context_management.edits.length) delete body.context_management;
-    }
-  }
-  if (!tier.effort && body.output_config) {
-    delete body.output_config.effort;
-    if (!Object.keys(body.output_config).length) delete body.output_config;
-  }
-  if (!tier.system && Array.isArray(body.messages)) body.messages = absorbSystemTurns(body.messages);
-  return body;
-}
+/** Whether a rung can hold this conversation. 10% headroom for the estimate's own error. */
+export const canHold = (tier, tokens, platform) => tokens <= (rungFor(tier, platform)?.window ?? Infinity) * 0.9;
 
-/**
- * Hooks and plugins append `role: "system"` entries to `messages`. Some tiers reject those
- * outright, so their content is folded into the neighbouring user turn instead — the same
- * place the CLI would have put it. Dropping them would silently discard hook output.
- */
-export function absorbSystemTurns(messages) {
-  const out = [];
-  for (const message of messages) {
-    if (message?.role !== "system") {
-      out.push(message);
-      continue;
-    }
-    const blocks = typeof message.content === "string"
-      ? [{ type: "text", text: message.content }]
-      : (message.content ?? []).filter((b) => b?.type === "text");
-    if (!blocks.length) continue;
-    const host = out.findLast?.((m) => m.role === "user");
-    if (host) {
-      host.content = typeof host.content === "string" ? [{ type: "text", text: host.content }] : [...(host.content ?? [])];
-      host.content.push(...blocks);
-    } else {
-      out.push({ role: "user", content: blocks });
-    }
-  }
-  return out;
-}
-
-/** Whether a tier can hold this conversation. 10% headroom for the estimate's own error. */
-export const canHold = (tierName, tokens) => tokens <= (rungFor(tierName)?.window ?? Infinity) * 0.9;
-
-/**
- * Exact models the signed-in account reports, newest first. Static ids are the cold-start
- * fallback so routing works before the CLI has fetched its catalog.
- */
-export function accountModels(catalog = []) {
+/** Models the account actually reports, newest first; static ids are the cold-start fallback. */
+export function accountModels(catalog = [], platform = "claude") {
   const models = catalog
-    .filter((m) => tierOfModel(m?.id))
-    .map((m) => ({
-      id: m.id,
-      tier: tierOfModel(m.id),
-      description: [m.display_name, m.created_at && `released ${m.created_at.slice(0, 10)}`]
-        .filter(Boolean)
-        .join("; "),
-    }));
-  return models.length ? models : LADDER.map((t) => ({ id: t.id, tier: t.name, description: t.id }));
+    .filter((m) => tierOfModel(m?.id, platform))
+    .map((m) => ({ id: m.id, tier: tierOfModel(m.id, platform), description: m.display_name ?? m.id }));
+  return models.length ? models : ladderFor(platform).map((r) => ({ id: r.id, tier: r.tier, description: r.id }));
 }
 
-export const modelIdFor = (models, tier) => models.find((m) => m.tier === tier)?.id ?? defaultIdFor(tier);
+export const modelIdFor = (models, tier, platform) =>
+  models.find((m) => m.tier === tier)?.id ?? defaultIdFor(tier, platform);

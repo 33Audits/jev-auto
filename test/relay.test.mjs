@@ -28,7 +28,7 @@ const convo = (texts, over = {}) => {
 };
 
 /** Boot a proxy with a stub router and a captured ledger. */
-async function harness({ choice = "haiku", confidence = 0.9, status = 200, usage } = {}) {
+async function harness({ choice = "fast", confidence = 0.9, status = 200, usage } = {}) {
   const up = await fakeUpstream({ status, usage });
   const calls = [];
   const ledger = [];
@@ -45,16 +45,16 @@ async function harness({ choice = "haiku", confidence = 0.9, status = 200, usage
 }
 
 test("the sentinel is rewritten to the routed model before it leaves the machine", async (t) => {
-  const h = await harness({ choice: "haiku" });
+  const h = await harness({ choice: "fast" });
   t.after(h.stop);
   await post(h.base, turn("rename the thing"));
   const sent = h.up.seen.at(-1).body;
   assert.notEqual(sent.model, SENTINEL);
-  assert.match(sent.model, /haiku/);
+  assert.match(sent.model, /haiku/, "the tier resolves to a real Claude model id");
 });
 
 test("fields the routed tier cannot accept are removed, not forwarded", async (t) => {
-  const h = await harness({ choice: "haiku" });
+  const h = await harness({ choice: "fast" });
   t.after(h.stop);
   await post(h.base, turn("rename the thing", {
     thinking: { type: "adaptive" },
@@ -76,7 +76,7 @@ test("a model the user picked is passed through untouched and pauses routing", a
 });
 
 test("the tier chosen for a turn is reused by the tool loop, not re-decided", async (t) => {
-  const h = await harness({ choice: "haiku" });
+  const h = await harness({ choice: "fast" });
   t.after(h.stop);
   await post(h.base, turn("do the thing"));
   await post(h.base, turn("", {
@@ -111,7 +111,7 @@ test("a finished turn is recorded once the next turn starts", async (t) => {
 });
 
 test("a correction grades the previous turn as escalated and holds the tier up", async (t) => {
-  const h = await harness({ choice: "haiku" });
+  const h = await harness({ choice: "fast" });
   t.after(h.stop);
   await post(h.base, convo(["first"]));
   await post(h.base, convo(["first", "no, that didn't work"]));
@@ -122,7 +122,7 @@ test("a correction grades the previous turn as escalated and holds the tier up",
 });
 
 test("switching to a stronger model by hand is recorded as an escalation", async (t) => {
-  const h = await harness({ choice: "haiku" });
+  const h = await harness({ choice: "fast" });
   t.after(h.stop);
   await post(h.base, convo(["first"]));
   await post(h.base, convo(["first", "same thing but properly"], { model: "claude-opus-5" }));
@@ -177,7 +177,7 @@ test("the base-URL probe is answered", async (t) => {
 });
 
 test("the account's own model catalog is used once it is fetched", async (t) => {
-  const h = await harness({ choice: "sonnet" });
+  const h = await harness({ choice: "balanced" });
   t.after(h.stop);
   await fetch(`${h.base}/v1/models`);
   await post(h.base, turn("implement the thing"));
@@ -197,7 +197,7 @@ test("a synchronous router works, and so does one that throws synchronously", as
   const ledger = [];
   const sync = await startRelay({
     upstreamURL: up.url,
-    appraise: () => ({ choice: "haiku", confidence: 0.9, metrics: {}, score: 0.1, shape: "b", backend: "sync" }),
+    appraise: () => ({ choice: "fast", confidence: 0.9, metrics: {}, score: 0.1, shape: "b", backend: "sync" }),
     ledger: (r) => ledger.push(r),
   });
   const boom = await startRelay({
