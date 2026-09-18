@@ -158,6 +158,14 @@ jev stats
 Token counts come off the wire, from the response the API actually returned, not from an
 estimate of what was sent.
 
+> **Read that "Saved" line sceptically — it is measured against all-Opus, which nobody runs.**
+> Benchmarked against all-Sonnet on 1,346 real prompts, the shipped scorer currently costs
+> **1.25× more** than simply using Sonnet, because it routes 6.8% of turns up to Opus and only
+> 3.0% down to Haiku. See [`bench/`](bench/). That is a defect, not a footnote, and it is
+> unfixed: the calibration loop is meant to correct it per-user from the ledger, but it starts
+> from shipped cutoffs that are wrong for this distribution. Do not install this expecting a
+> saving yet.
+
 ### 4. It survives contact with a real session
 
 Three things a proxy has to get right that only show up against a live CLI, all of them found
