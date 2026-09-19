@@ -181,27 +181,41 @@ jev stats
 Token counts come off the wire, from the response the API actually returned, not from an
 estimate of what was sent.
 
-> **Measured, building the same React app six ways.** Every arm met all seven requirements
-> of the brief — `bench/grade.mjs` checks them, not just whether it compiled.
+> **What is measured, and what was withdrawn.**
+>
+> An earlier version of this README claimed 75% cheaper and 18% faster on a React build. That
+> number is withdrawn. It came from a mode that fires when Jev's confidence falls below
+> `minConfidence` — and Jev's confidence was only that low because the request being sent to it
+> was malformed: flat one-line criteria, one question, no rubric. Asked properly, Jev is
+> confident on the same prompts (0.61-0.94), the mode never triggers, and the saving is gone.
+> It measured a bad request, not routing.
+>
+> What survives, measured on the same build with every arm meeting all seven requirements of
+> the brief (`bench/grade.mjs` checks them):
 >
 > | | wall | spend | requirements |
 > | --- | --- | --- | --- |
 > | vanilla Claude Code (Sonnet) | 114s | $1.9383 | 7/7 |
-> | **jev** | **93s** | **$0.4810** | **7/7** |
-> | bookend: pinned to the cheapest rung | 77s | $0.4601 | 7/7 |
+> | pinned to the cheapest rung | 77s | $0.4601 | 7/7 |
 >
-> **75% cheaper, 18% faster, same app** — and within 4% of the pinned-cheapest bookend, so
-> routing finds essentially all of the saving that was there.
+> The cheapest rung did the whole task for a quarter of the price. That is the headroom
+> routing is aiming at, and default routing captured almost none of it (+3%) because the
+> prompt-cache guard correctly pins a conversation to whatever its first turn chose.
 >
-> What makes it pay is acting on Jev's *uncertainty*, not just its answer. Following Jev's
-> choice alone saved nothing (+3%): it returns `balanced` at ~0.27 confidence on the turn that
-> decides the session, and the prompt-cache guard then pins the whole conversation to that
-> rung. Below `minConfidence` Jev is telling you it has no preference — so jev-auto takes the
-> cheapest rung that fits and lets the escalation floor recover if that was wrong.
+> **The larger measured win is not routing at all.** A real session here sent 207 tool
+> definitions, ~100k tokens, of which built-ins were 23k. Asking Jev which toolsets the turn
+> needs dropped 11 of them:
 >
-> Caveats worth knowing: n=1 per arm (cost is deterministic, wall-clock is noisy); Claude with
-> 227 MCP tool schemas loaded runs at 308k context where the cheapest rung is unreachable and
-> routing is a no-op; Codex is 21% faster but its dollar figures use placeholder rates.
+> | | context |
+> | --- | --- |
+> | before | ~217,790 tokens |
+> | after | **~126,870 tokens** — 42% smaller, ~91k dropped in 451ms |
+>
+> A tool schema nobody calls is waste at every rung, so this has no price-spread ceiling — and
+> it is what makes the cheapest rung reachable here at all.
+>
+> Caveats: n=1 per arm; cost is deterministic, wall-clock is not (the same vanilla arm has
+> measured 84-147s). Codex dollar figures use placeholder rates and are not comparable.
 
 ### 4. It survives contact with a real session
 
