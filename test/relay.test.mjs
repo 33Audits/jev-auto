@@ -33,10 +33,10 @@ const convo = (texts, over = {}) => {
 };
 
 /** Boot a proxy with a stub router and a captured ledger. */
-async function harness({ choice = "fast", confidence = 0.9, status = 200, usage } = {}) {
-  // Routing state persists across processes now, so each case needs its own store or one
-  // test's conversation gets resumed by the next.
-  process.env.JEV_THREADS = mkdtempSync(join(tmpdir(), "jev-threads-"));
+async function harness({ choice = "fast", confidence = 0.9, status = 200, usage, pin, exploreRate = 0 } = {}) {
+  // Its own store, passed in rather than set on the environment: relays in one process must
+  // not be able to resume each other's conversations. A global here raced.
+  const threadStore = mkdtempSync(join(tmpdir(), "jev-threads-"));
   const up = await fakeUpstream({ status, usage });
   const calls = [];
   const ledger = [];
@@ -47,6 +47,10 @@ async function harness({ choice = "fast", confidence = 0.9, status = 200, usage 
       return { choice, confidence, metrics: {}, score: 0.2, shape: "test/shape", backend: "stub", ms: 0 };
     },
     ledger: (r) => ledger.push(r),
+    pin,
+    threadStore,
+    exploreRate, // off unless a case is about exploration; otherwise it is a coin flip
+    history: [],  // no learned demotions from this machine's ledger
   });
   const base = `http://127.0.0.1:${proxy.port}`;
   return { up, base, calls, ledger, proxy, stop: () => (proxy.close(), up.close()) };
@@ -189,7 +193,8 @@ test("the account's own model catalog is used once it is fetched", async (t) => 
   t.after(h.stop);
   await fetch(`${h.base}/v1/models`);
   await post(h.base, turn("implement the thing"));
-  assert.equal(h.up.seen.at(-1).body.model, "claude-sonnet-5");
+  const sent = h.up.seen.at(-1).body.model;
+  assert.equal(sent, "claude-sonnet-5", `sent ${sent}; picks=${JSON.stringify(h.calls.length)}`);
 });
 
 test("open turns are flushed when the session ends", async (t) => {
@@ -204,11 +209,17 @@ test("a synchronous router works, and so does one that throws synchronously", as
   const up = await fakeUpstream();
   const ledger = [];
   const sync = await startRelay({
+    exploreRate: 0,
+    history: [],
+    threadStore: mkdtempSync(join(tmpdir(), "jev-threads-")),
     upstreamURL: up.url,
     appraise: () => ({ choice: "fast", confidence: 0.9, metrics: {}, score: 0.1, shape: "b", backend: "sync" }),
     ledger: (r) => ledger.push(r),
   });
   const boom = await startRelay({
+    exploreRate: 0,
+    history: [],
+    threadStore: mkdtempSync(join(tmpdir(), "jev-threads-")),
     upstreamURL: up.url,
     appraise: () => {
       throw new Error("sync explosion");
@@ -225,10 +236,8 @@ test("a synchronous router works, and so does one that throws synchronously", as
   assert.notEqual(up.seen.at(-1).body.model, SENTINEL);
 });
 
-test("JEV_PIN meters a session without routing it", async (t) => {
-  process.env.JEV_PIN = "strong";
-  t.after(() => delete process.env.JEV_PIN);
-  const h = await harness({ choice: "fast" });
+test("a pinned rung meters a session without routing it", async (t) => {
+  const h = await harness({ choice: "fast", pin: "strong" });
   t.after(h.stop);
   await post(h.base, convo(["anything at all"]));
   assert.match(h.up.seen.at(-1).body.model, /opus/, "the pinned rung wins over the appraiser");
@@ -258,4 +267,18 @@ test("a turn's usage is the sum of every request it took, not just the first", a
 
   assert.equal(h.ledger[0].out, 150, "three requests at 50 output tokens each");
   assert.equal(h.ledger[0].in, 300);
+});
+
+// Exploration is intentionally nondeterministic, so it gets its own case rather than being
+// left to perturb every other one. This is what made the catalog test fail ~1 run in 4.
+test("exploration takes the cheaper rung, and only when switched on", async (t) => {
+  const off = await harness({ choice: "balanced", exploreRate: 0 });
+  t.after(off.stop);
+  await post(off.base, convo(["build a thing"]));
+  assert.match(off.up.seen.at(-1).body.model, /sonnet/, "off: the appraiser's rung goes out");
+
+  const on = await harness({ choice: "balanced", exploreRate: 1 });
+  t.after(on.stop);
+  await post(on.base, convo(["build another thing"]));
+  assert.match(on.up.seen.at(-1).body.model, /haiku/, "on: the cheaper rung is tried");
 });

@@ -33,13 +33,25 @@ export async function startRelay({
   upstreamURL = wire.upstream,
   appraise = selectAppraiser(),
   ledger = recordTurn,
+  // Passed in rather than read from the environment on every request: a global that changes
+  // under async work is untestable, and two tests mutating it raced.
+  pin = TIER_ORDER.includes(process.env.JEV_PIN) ? process.env.JEV_PIN : null,
+  // Same reason as `pin`: resolved once when the relay starts, not read from a global on
+  // every request. Two relays in one process must not be able to steer each other's state.
+  threadStore = undefined,
+  // Exploration deliberately makes routing nondeterministic — it sometimes takes a rung the
+  // appraiser did not pick. Injectable so a caller that needs a deterministic relay (a test
+  // asserting which model went out) can switch it off, rather than fighting a coin flip.
+  exploreRate = undefined,
+  // What exploration has already established. Read from the ledger by default; injectable so
+  // a test is not steered by whatever trials happen to sit in the developer's ledger.
+  history = readLedger(),
 } = {}) {
   const platform = wire.platform;
   const threads = new Map();
   const catalog = new Map();
   // Cutoffs are derived once at startup: the ledger only moves them across sessions, and
   // re-deriving per turn would shift a session's routing under the user mid-task.
-  const history = readLedger();
   const cutoffs = calibratedCutoffs(history);
   sweepThreads();
   debug(`${platform}: cutoffs ${cutoffs.cheap}/${cutoffs.strong} appraiser=${appraiserName()}`);
@@ -60,7 +72,7 @@ export async function startRelay({
       }
       // Continue a conversation this process did not start: `jev -p` is a new process per
       // invocation, and without this every scripted turn looked like a first turn.
-      const persisted = loadThread(key);
+      const persisted = loadThread(key, threadStore);
       s = { tier: null, model: null, pending: null, floor: null, floorTurns: 0, ...(persisted ?? {}) };
       threads.set(key, s);
     }
@@ -128,7 +140,7 @@ export async function startRelay({
               // cost, and escalations, but every turn runs on one rung. This is the control
               // arm a routed run is compared against, and the honest way to measure both —
               // same accounting path, same overhead, only the decision differs.
-              const pinned = TIER_ORDER.includes(process.env.JEV_PIN) ? process.env.JEV_PIN : null;
+              const pinned = pin;
 
               const models = accountModels([...catalog.values()], platform).filter((m) =>
                 enabledTiers().includes(m.tier),
@@ -174,6 +186,7 @@ export async function startRelay({
                 shouldExplore({
                   tier, shape, contextTokens, floor: state.floor, records: history,
                   confidence: decision?.confidence,
+                  ...(exploreRate === undefined ? {} : { rate: exploreRate }),
                 })
               ) {
                 tier = cheaperThan(tier) ?? tier;
@@ -183,7 +196,7 @@ export async function startRelay({
 
               state.tier = tier;
               state.model = tier === current && state.model ? state.model : modelIdFor(models, tier, platform);
-              saveThread(wire.threadKey(body), state);
+              saveThread(wire.threadKey(body), state, threadStore);
               state.pending = {
                 t: Date.now(), shape, tier,
                 backend: decision?.backend ?? "none", score: decision?.score ?? null,

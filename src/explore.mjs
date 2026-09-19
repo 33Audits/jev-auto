@@ -36,6 +36,8 @@ export function shouldExplore({
   if (!cheaper) return false;
   if (!canHold(cheaper, contextTokens)) return false;
   if (verdictForShape(records, shape, cheaper) !== "unknown") return false;
+  // An explicit rate of 0 means off, including the uncertainty weighting.
+  if (rate === 0) return false;
   return rng() < exploreRateFor(confidence, rate);
 }
 

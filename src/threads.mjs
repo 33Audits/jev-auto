@@ -21,11 +21,12 @@ export const dirOf = () => process.env.JEV_THREADS || join(tmpdir(), "jev-auto",
 /** Conversations idle longer than this are finished; their state is not worth keeping. */
 const TTL_MS = 12 * 60 * 60 * 1000;
 
-const fileFor = (key) => join(dirOf(), `${String(key).replace(/[^\w-]/g, "")}.json`);
+const fileFor = (key, dir = dirOf()) => join(dir, `${String(key).replace(/[^\w-]/g, "")}.json`);
 
-export function load(key) {
+export function load(key, dir) {
+  dir ??= dirOf();
   try {
-    const file = fileFor(key);
+    const file = fileFor(key, dir);
     // Freshness comes from the file's own mtime, the same clock `sweep` uses. Reading a
     // timestamp out of the contents instead let the two disagree.
     if (Date.now() - statSync(file).mtimeMs > TTL_MS) return null;
@@ -35,12 +36,13 @@ export function load(key) {
   }
 }
 
-export function save(key, state) {
+export function save(key, state, dir) {
+  dir ??= dirOf();
   try {
-    mkdirSync(dirOf(), { recursive: true });
+    mkdirSync(dir, { recursive: true });
     // Only the fields that must survive; never prompt text.
     writeFileSync(
-      fileFor(key),
+      fileFor(key, dir),
       JSON.stringify({ tier: state.tier, model: state.model, floor: state.floor, floorTurns: state.floorTurns, at: Date.now() }),
     );
   } catch {
