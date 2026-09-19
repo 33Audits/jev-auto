@@ -53,16 +53,46 @@ function prepare(task, dir) {
   const before = run("sh", ["-c", task.test], { cwd: dir });
   if (before.status !== 0) return { ok: false, why: "suite already failing upstream" };
 
-  // The mutation: drop the first early-return/guard in the target file. Mechanical, so it is
-  // the same break for every tier, and recorded so the task is reproducible.
+  // Two mutation kinds, because difficulty has to vary or the benchmark cannot discriminate.
+  //
+  //   guard    removes the first early-return/guard. Usually an input check: the failure is
+  //            loud and the fix is obvious. Any rung tends to manage it.
+  //   operator flips one comparison or boundary deep in the file (< to <=, + to -, 0 to 1).
+  //            Nothing looks missing, the suite fails somewhere unrelated to the edit, and
+  //            finding it is actual debugging.
+  //
+  // Both are mechanical. The bug is chosen by rule, not written by hand.
   const file = join(dir, task.break);
   if (!existsSync(file)) return { ok: false, why: `missing ${task.break}` };
   const src = readFileSync(file, "utf8");
   const lines = src.split("\n");
-  const idx = lines.findIndex((l) => /^\s*(if\s*\(|return |throw )/.test(l) && !/^\s*\/\//.test(l));
-  if (idx < 0) return { ok: false, why: "no mutable guard found" };
-  const removed = lines[idx];
-  lines.splice(idx, 1);
+  let removed;
+  let brokeAt;
+
+  if ((task.mutation ?? "guard") === "operator") {
+    const FLIPS = [[" <= ", " < "], [" >= ", " > "], [" < ", " <= "], [" > ", " >= "], [" + 1", " + 2"], [" - 1", " - 2"]];
+    // Deliberately not the first line: a flip near the top is as easy to spot as a deletion.
+    let done = false;
+    for (let i = Math.floor(lines.length / 3); i < lines.length && !done; i++) {
+      if (/^\s*\/\//.test(lines[i])) continue;
+      for (const [from, to] of FLIPS) {
+        if (lines[i].includes(from)) {
+          removed = `${lines[i].trim()}   [${from.trim()} -> ${to.trim()}]`;
+          lines[i] = lines[i].replace(from, to);
+          brokeAt = i + 1;
+          done = true;
+          break;
+        }
+      }
+    }
+    if (!done) return { ok: false, why: "no flippable comparison found" };
+  } else {
+    const idx = lines.findIndex((l) => /^\s*(if\s*\(|return |throw )/.test(l) && !/^\s*\/\//.test(l));
+    if (idx < 0) return { ok: false, why: "no mutable guard found" };
+    removed = lines[idx].trim();
+    brokeAt = idx + 1;
+    lines.splice(idx, 1);
+  }
   writeFileSync(file, lines.join("\n"));
 
   const after = run("sh", ["-c", task.test], { cwd: dir });
@@ -79,7 +109,7 @@ function prepare(task, dir) {
     .slice(0, 40)
     .join("\n");
 
-  return { ok: true, sha, removed: removed.trim(), brokeAt: idx + 1, failure };
+  return { ok: true, sha, removed, brokeAt, mutation: task.mutation ?? "guard", failure };
 }
 
 /** What a developer would type: the failing output, then the ask. */

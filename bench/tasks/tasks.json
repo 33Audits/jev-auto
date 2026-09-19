@@ -6,7 +6,8 @@
     "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
   },
   {
     "id": "slugify",
@@ -15,7 +16,8 @@
     "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
   },
   {
     "id": "indent-string",
@@ -24,7 +26,8 @@
     "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
   },
   {
     "id": "filenamify",
@@ -33,7 +36,8 @@
     "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
   },
   {
     "id": "p-limit",
@@ -42,13 +46,55 @@
     "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
   },
   {
     "id": "decamelize",
     "repo": "https://github.com/sindresorhus/decamelize.git",
     "ref": "main",
     "break": "index.js",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests.",
+    "mutation": "guard"
+  },
+  {
+    "id": "semver-op",
+    "repo": "https://github.com/npm/node-semver.git",
+    "ref": "main",
+    "break": "classes/range.js",
+    "mutation": "operator",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx tap --disable-coverage --allow-empty-coverage",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "p-limit-op",
+    "repo": "https://github.com/sindresorhus/p-limit.git",
+    "ref": "main",
+    "break": "index.js",
+    "mutation": "operator",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "filenamify-op",
+    "repo": "https://github.com/sindresorhus/filenamify.git",
+    "ref": "main",
+    "break": "index.js",
+    "mutation": "operator",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "camelcase-op",
+    "repo": "https://github.com/sindresorhus/camelcase.git",
+    "ref": "main",
+    "break": "index.js",
+    "mutation": "operator",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
     "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
