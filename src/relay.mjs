@@ -144,6 +144,9 @@ export async function startRelay({
                     contextTokens,
                     toolCount: body.tools?.length ?? 0,
                     cutoffs,
+                    // Offering a rung the account cannot use invites Jev to spend probability
+                    // mass on it; `long` was being offered even when disabled.
+                    available,
                     upstream: upstreamURL,
                     auth: authHeadersOf(req.headers),
                   }),

@@ -1,21 +1,78 @@
-// Router backend that delegates to TypeSafe's Jev decision model, for users who already
-// have a key. Raw fetch rather than the SDK so jev-auto keeps zero runtime dependencies.
+// Jev — TypeSafe's System One decision model — asked the way it is meant to be asked.
 //
-// Fail-safe by construction: any error, timeout, missing key, or unexpected answer falls
-// back to the local answer, so enabling this backend can never make routing worse.
+// Jev returns a probability distribution over options rather than text, and the docs are
+// explicit that it is trained to read STRUCTURE: "Instructions, Choice options, Score levels
+// and Noul criteria all accept JSON structure", and "a Choice option description can be a
+// structured object as well".
+//
+// So each rung is described as an object — what it is for, the signals that indicate it, and
+// what it is explicitly not for — rather than a one-line string. The rubric questions are
+// asked of Jev as Score primitives instead of being computed locally and presented as if they
+// came from the model: the factors `jev why` displays are Jev's own, and the choice is made
+// with the same rubric in view.
+//
+// Fail-safe by construction: any error, timeout, missing key, or unexpected answer falls back
+// to the local appraiser, so this can never make routing worse than not having a key.
 import { NETWORK } from "../tuning.mjs";
 import { TIER_ORDER } from "../ladder.mjs";
 import { appraise as appraiseLocally } from "./heuristic.mjs";
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 
-const CRITERIA = {
-  fast: "Trivial, mechanical, or purely factual work. Not for design judgement or multi-file reasoning.",
-  balanced: "Ordinary engineering with a clear, bounded shape. Not for open-ended architecture or unknown-cause debugging.",
-  strong: "Hard reasoning, ambiguity, or high blast radius: debugging, cross-module design, security, concurrency, migrations.",
+/** Structured option descriptions. Jev reads these fields, not a sentence. */
+const RUNGS = {
+  fast: {
+    for: "Mechanical work where the answer is known before the model starts thinking.",
+    signals: [
+      "rename, reformat, add a comment or a type annotation",
+      "a single obvious command to run",
+      "a factual question about code that is already in front of you",
+      "a failure whose cause is stated in the error itself",
+    ],
+    not_for: "Design judgement, multi-file reasoning, or any cause that has to be found.",
+  },
+  balanced: {
+    for: "Ordinary engineering with a clear, bounded shape.",
+    signals: [
+      "implement a function to a stated spec",
+      "write or fix a test for understood behaviour",
+      "a local bug whose mechanism is already understood",
+      "a change confined to one or two files",
+    ],
+    not_for: "Open-ended architecture, subtle concurrency, or debugging with no candidate cause.",
+  },
+  strong: {
+    for: "Hard reasoning, genuine ambiguity, or a large blast radius.",
+    signals: [
+      "the cause is unknown and has to be located",
+      "cross-module design, migrations, schema or protocol changes",
+      "concurrency, race conditions, ordering, atomicity",
+      "security, authentication, authorisation, fund movement",
+      "the failure surfaces far from its cause",
+    ],
+    not_for: "Routine work whose implementation is already clear.",
+  },
+  long: {
+    for: "Work beyond a single focused session.",
+    signals: ["whole-repository migration", "unusually large context", "multi-hour autonomous execution"],
+    not_for: "Anything a strong model finishes in one sitting.",
+  },
 };
 
-export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutoffs }) {
+/** Score rubric. Levels are objects because Jev reads the structure. */
+const LEVELS = [
+  { level: 0, means: "none at all" },
+  { level: 2, means: "trivial — mechanical, no judgement" },
+  { level: 4, means: "moderate — bounded and understood" },
+  { level: 6, means: "high — requires real reasoning or several coordinated steps" },
+  { level: 8, means: "severe — ambiguous, or the cause must be discovered" },
+  { level: 10, means: "extreme — open-ended with a large blast radius" },
+];
+const MAX_LEVEL = 10;
+
+const scoreQuestion = (instructions) => ({ type: "score", instructions, criteria: LEVELS });
+
+export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutoffs, available = TIER_ORDER }) {
   const local = appraiseLocally({ prompt, contextTokens, toolCount, cutoffs });
   const apiKey = process.env.JEV_API_KEY ?? process.env.TYPESAFE_API_KEY;
   if (!apiKey) return { ...local, backend: "jev/no-key" };
@@ -23,6 +80,9 @@ export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutof
   const started = Date.now();
   const abort = new AbortController();
   const deadline = setTimeout(() => abort.abort(), NETWORK.deadlineMs);
+
+  const criteria = Object.fromEntries(available.filter((t) => RUNGS[t]).map((t) => [t, RUNGS[t]]));
+
   try {
     const res = await fetch(ENDPOINT, {
       method: "POST",
@@ -30,23 +90,48 @@ export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutof
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: "jev-latest",
-        state: { request: String(prompt).slice(0, 4000), session: { context_tokens: contextTokens } },
+        state: {
+          request: String(prompt).slice(0, 8000),
+          session: { context_tokens: contextTokens, tools_available: toolCount },
+          environment: { available_rungs: Object.keys(criteria) },
+        },
         questions: {
-          tier: {
+          task_complexity: scoreQuestion("How complex is this coding task overall — its ambiguity, scope, and blast radius?"),
+          reasoning_required: scoreQuestion("How much reasoning is needed to get this right in one pass, without a retry on a stronger model?"),
+          tool_complexity: scoreQuestion("How complex is the tool use — from none, to many coordinated or stateful operations?"),
+          rung: {
             type: "choice",
-            instructions: "Which tier should serve this coding request, balancing cost and capability?",
-            criteria: CRITERIA,
+            instructions: [
+              "Pick the cheapest rung that can fully complete this request in one pass, without needing a retry on a stronger one.",
+              "Judge the reasoning required, not the length of the reply.",
+              "A failure whose cause is stated in the error is cheaper than one whose cause must be found.",
+            ],
+            criteria,
           },
         },
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const answer = (await res.json())?.answers?.tier;
-    if (!TIER_ORDER.includes(answer?.choice)) throw new Error("unrecognised choice");
+    const answers = (await res.json())?.answers;
+    const choice = answers?.rung?.choice;
+    if (!TIER_ORDER.includes(choice)) throw new Error("unrecognised rung");
+
+    // Jev's own rubric, not a local estimate wearing its name.
+    const factor = (key) =>
+      Number.isFinite(answers?.[key]?.score) ? answers[key].score / MAX_LEVEL : null;
+    const metrics = {
+      taskComplexity: factor("task_complexity"),
+      reasoningRequired: factor("reasoning_required"),
+      toolComplexity: factor("tool_complexity"),
+      contextSize: local.metrics.contextSize,
+    };
+
     return {
       ...local,
-      choice: answer.choice,
-      confidence: Number.isFinite(answer.confidence) ? answer.confidence : 0.7,
+      choice,
+      confidence: Number.isFinite(answers.rung.confidence) ? answers.rung.confidence : 0.7,
+      probabilities: answers.rung.probabilities ?? null,
+      metrics,
       backend: "jev",
       ms: Date.now() - started,
     };

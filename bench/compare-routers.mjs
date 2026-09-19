@@ -46,7 +46,7 @@ const tasks = [...new Set(results.filter((r) => !r.skipped).map((r) => r.task))]
 // Every router is asked for a tier, then put through the SAME policy the product uses, so the
 // comparison is of appraisers rather than of policies.
 const decide = async (appraiseFn, task) => {
-  const d = await appraiseFn({ prompt: task.prompt, contextTokens: 130000, cutoffs: shippedCutoffs() });
+  const d = await appraiseFn({ prompt: task.prompt, contextTokens: 130000, cutoffs: shippedCutoffs(), available: AVAILABLE });
   return verdictFor({
     prompt: task.prompt, decision: d, current: "balanced",
     available: AVAILABLE, contextTokens: 130000,
