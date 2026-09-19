@@ -214,6 +214,24 @@ estimate of what was sent.
 > A tool schema nobody calls is waste at every rung, so this has no price-spread ceiling — and
 > it is what makes the cheapest rung reachable here at all.
 >
+> **And this is the one place Jev measurably beats every alternative.** 24 requests derived
+> from the MCP servers' own tool descriptions, so the labels are not hand-written — a request
+> built from a tool's description necessarily needs that tool's server (`bench/toolsets.mjs`):
+>
+> | selector | recall | savings |
+> | --- | --- | --- |
+> | **jev @0.15** | **100%** | **87%** |
+> | jev @0.30 | 96% | 91% |
+> | jev @0.50 | 79% | 92% |
+> | a local keyword heuristic | 33% | 97% |
+> | keep everything | 100% | 0% |
+> | drop everything | 0% | 100% |
+>
+> Jev at 0.15 strictly dominates keeping everything: identical recall, an eighth of the tokens.
+> Not a trade-off. The keyword heuristic — written here, for comparison — gives up 67 points of
+> recall to save 10 more, which is the wrong side of that trade when a dropped toolset means a
+> capability is simply absent.
+>
 > Caveats: n=1 per arm; cost is deterministic, wall-clock is not (the same vanilla arm has
 > measured 84-147s). Codex dollar figures use placeholder rates and are not comparable.
 

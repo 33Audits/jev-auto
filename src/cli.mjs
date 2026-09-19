@@ -12,6 +12,7 @@ import { appraiserName } from "./appraisers/index.mjs";
 import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
 import { TIER_ORDER, canHold, PRICES_VERIFIED } from "./ladder.mjs";
 import { explorationReport } from "./explore.mjs";
+import { listParked, listRules, park, unpark, PARKED, RULES } from "./context.mjs";
 import { CALIBRATION } from "./tuning.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
@@ -33,6 +34,7 @@ const HELP = `jev — per-turn model routing for Claude Code
   jev stats              What routing has cost, saved, and learned
   jev why [session-id]   The last routing decision, in full
   jev try "<prompt>"     Show where a prompt would appraise, without running anything
+  jev context            What is injected into every session, and park what you are not using
   jev doctor             Check the install
   jev reset              Delete the learning ledger and session state
   jev help               This
@@ -150,6 +152,43 @@ function cmdTry(prompt) {
   );
 }
 
+/**
+ * What is injected into every session, and a switch for it. The heavy entries here are
+ * symlinks owned by other tools, which read them back through this exact path — so they are
+ * parked, never deleted, and restored by name.
+ */
+function cmdContext(action, name) {
+  const loaded = listRules();
+  const parked = listParked();
+
+  if (action === "off" || action === "on") {
+    const targets = name ? [name] : (action === "off" ? loaded : parked).map((e) => e.name);
+    if (!name) {
+      out(`Refusing to ${action} everything at once — name an entry, or use --heavy.`);
+      out(`  jev context ${action} phase6-report-prompts.md`);
+      return;
+    }
+    const r = action === "off" ? park(targets[0]) : unpark(targets[0]);
+    out(r.ok ? `${action === "off" ? "parked" : "restored"} ${targets[0]}` : `${targets[0]}: ${r.why}`);
+    return;
+  }
+
+  const total = loaded.reduce((s, e) => s + e.tokens, 0);
+  out(`\n  ${total}k tokens injected into every session, from ${RULES.replace(process.env.HOME ?? "", "~")}\n`);
+  out("  entry                                tokens  owned by");
+  for (const e of loaded) {
+    out(`  ${e.name.slice(0, 34).padEnd(34)} ${String(e.tokens).padStart(5)}k  ${(e.target ?? "(plain file)").replace(process.env.HOME ?? "", "~")}`);
+  }
+  if (parked.length) {
+    out(`\n  parked (${parked.reduce((s, e) => s + e.tokens, 0)}k, not injected):`);
+    for (const e of parked) out(`    ${e.name}`);
+  }
+  out(`\n  These are read back by the tools that own them, so they are parked rather than deleted.`);
+  out(`  Park one:    jev context off <entry>`);
+  out(`  Restore one: jev context on <entry>`);
+  out(`  A parked entry must be restored before the tool that owns it will work.\n`);
+}
+
 function cmdDoctor() {
   loadEnvFiles();
   const checks = [];
@@ -224,6 +263,8 @@ export async function main(argv = process.argv.slice(2)) {
       return cmdWhy(rest[0]);
     case "try":
       return cmdTry(rest.join(" "));
+    case "context":
+      return cmdContext(rest[0], rest[1]);
     case "doctor":
       return cmdDoctor();
     case "reset":

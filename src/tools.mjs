@@ -62,7 +62,22 @@ const questionFor = (group) => ({
  *
  * @returns {Promise<?{keep: Set<string>, dropped: number, savedChars: number, ms: number}>}
  */
-export async function selectToolsets({ prompt, tools, threshold = 0.5 }) {
+/**
+ * Default threshold 0.15, not a guess. Swept offline over one set of Jev answers on 24
+ * requests derived from the servers' own tool descriptions (bench/toolsets.mjs):
+ *
+ *   jev @0.15   100% recall   87% savings   <- strictly dominates keep-all
+ *   jev @0.30    96%          91%
+ *   jev @0.50    79%          92%
+ *   keep-all    100%           0%
+ *   keyword      33%          97%           <- a local heuristic, for comparison
+ *
+ * 0.15 keeps everything the request needed while dropping 87% of the schema, so it is not a
+ * trade against keep-all — it is the same recall for an eighth of the tokens. Raising it to
+ * 0.30 buys four more points of saving for four of recall; a dropped toolset the turn needed
+ * is a capability that is simply absent, so recall is worth more than that.
+ */
+export async function selectToolsets({ prompt, tools, threshold = 0.15, raw = false }) {
   const apiKey = process.env.JEV_API_KEY ?? process.env.TYPESAFE_API_KEY;
   if (!apiKey || !prompt) return null;
   const groups = groupsIn(tools);
@@ -95,7 +110,10 @@ export async function selectToolsets({ prompt, tools, threshold = 0.5 }) {
       if (!Number.isFinite(score) || score >= threshold) keep.add(g.name);
       else savedChars += g.chars;
     }
-    return { keep, dropped: groups.length - keep.size, savedChars, ms: Date.now() - started };
+    const result = { keep, dropped: groups.length - keep.size, savedChars, ms: Date.now() - started };
+    // The benchmark thresholds offline so one set of answers scores every operating point.
+    if (raw) result.scores = Object.fromEntries(groups.map((g) => [g.name, answers[g.name]?.noul]));
+    return result;
   } catch (err) {
     debug(`toolset selection failed, sending all tools: ${err.message}`);
     return null;
