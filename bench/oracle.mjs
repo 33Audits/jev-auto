@@ -67,14 +67,31 @@ function prepare(task, dir) {
 
   const after = run("sh", ["-c", task.test], { cwd: dir });
   if (after.status === 0) return { ok: false, why: "mutation did not break the suite" };
-  return { ok: true, sha, removed: removed.trim(), brokeAt: idx + 1 };
+
+  // The prompt is the repository's own failure output — what a developer would actually
+  // paste. It differs per task because the mutation and the suite differ, so an appraiser
+  // gets real per-task signal instead of one sentence I wrote six times. Nothing here is
+  // authored: the text comes from `ava`.
+  const failure = `${after.stdout ?? ""}\n${after.stderr ?? ""}`
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .split("\n")
+    .filter((l) => l.trim())
+    .slice(0, 40)
+    .join("\n");
+
+  return { ok: true, sha, removed: removed.trim(), brokeAt: idx + 1, failure };
 }
 
-const attempt = (dir, task, tier, ledger) => {
+/** What a developer would type: the failing output, then the ask. */
+const promptFor = (task, failure) =>
+  `The test suite in this repository is failing:\n\n${failure}\n\n` +
+  `Fix the source so every test passes. Do not modify the tests.`;
+
+const attempt = (dir, task, tier, ledger, prompt) => {
   const env = { ...process.env, JEV_PIN: tier, JEV_LEDGER: ledger, JEV_THREADS: `${ledger}.threads`, JEV_DEBUG: "1" };
   rmSync(ledger, { force: true });
   const started = Date.now();
-  const r = run(process.execPath, [JEV, "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "-p", task.prompt], { cwd: dir, env });
+  const r = run(process.execPath, [JEV, "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "-p", prompt], { cwd: dir, env });
   const verify = run("sh", ["-c", task.test], { cwd: dir });
   return {
     passed: verify.status === 0,
@@ -97,8 +114,10 @@ for (const task of TASKS) {
         results.push({ task: task.id, tier, run: runIdx, skipped: prep.why });
         continue;
       }
-      const r = attempt(dir, task, tier, join(WORK, `${task.id}-${tier}-${runIdx}.jsonl`));
-      results.push({ task: task.id, tier, run: runIdx, sha: prep.sha, removed: prep.removed, ...r });
+      const prompt = promptFor(task, prep.failure);
+      const r = attempt(dir, task, tier, join(WORK, `${task.id}-${tier}-${runIdx}.jsonl`), prompt);
+      // The prompt is recorded so a router can be scored on exactly what the task presented.
+      results.push({ task: task.id, tier, run: runIdx, sha: prep.sha, removed: prep.removed, prompt, ...r });
       process.stderr.write(`  ${task.id.padEnd(20)} ${tier.padEnd(9)} run${runIdx} ${r.passed ? "PASS" : "FAIL"} ${r.seconds}s $${r.spend.toFixed(4)}\n`);
       writeFileSync(OUT, JSON.stringify(results, null, 2));
     }

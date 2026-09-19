@@ -1,22 +1,56 @@
 [
   {
-    "id": "camelcase-revert",
+    "id": "camelcase",
     "repo": "https://github.com/sindresorhus/camelcase.git",
     "ref": "main",
+    "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
-    "break": "src/index.js",
-    "prompt": "The test suite is failing. Find the cause and fix it so every test passes. Do not change the tests.",
-    "difficulty": "easy"
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
   },
   {
-    "id": "slugify-revert",
+    "id": "slugify",
     "repo": "https://github.com/sindresorhus/slugify.git",
     "ref": "main",
+    "break": "index.js",
     "install": "npm install --no-audit --no-fund",
     "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "indent-string",
+    "repo": "https://github.com/sindresorhus/indent-string.git",
+    "ref": "main",
     "break": "index.js",
-    "prompt": "The test suite is failing. Find the cause and fix it so every test passes. Do not change the tests.",
-    "difficulty": "medium"
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "filenamify",
+    "repo": "https://github.com/sindresorhus/filenamify.git",
+    "ref": "main",
+    "break": "index.js",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "p-limit",
+    "repo": "https://github.com/sindresorhus/p-limit.git",
+    "ref": "main",
+    "break": "index.js",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
+  },
+  {
+    "id": "decamelize",
+    "repo": "https://github.com/sindresorhus/decamelize.git",
+    "ref": "main",
+    "break": "index.js",
+    "install": "npm install --no-audit --no-fund",
+    "test": "npx ava",
+    "prompt": "The test suite in this repository is failing. Find the cause and fix the source so every test passes. Do not modify the tests."
   }
 ]
