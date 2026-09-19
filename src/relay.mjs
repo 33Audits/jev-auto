@@ -10,6 +10,7 @@ import { cutoffs as calibratedCutoffs } from "./calibrate.mjs";
 import { append as recordTurn, read as readLedger } from "./ledger.mjs";
 import { RULES } from "./tuning.mjs";
 import { applyLearned, cheaperThan, shouldExplore } from "./explore.mjs";
+import { pruneTools, selectToolsets } from "./tools.mjs";
 import { debug, log } from "./diag.mjs";
 import { recordDecision, recordManual } from "./journal.mjs";
 import { load as loadThread, save as saveThread, sweep as sweepThreads } from "./threads.mjs";
@@ -136,11 +137,27 @@ export async function startRelay({
             if (prompt) {
               gradePrevious(state, readsAsRetry(prompt));
 
-              // JEV_PIN meters a session without routing it: the relay still records tokens,
-              // cost, and escalations, but every turn runs on one rung. This is the control
-              // arm a routed run is compared against, and the honest way to measure both —
-              // same accounting path, same overhead, only the decision differs.
+              // A pinned rung meters a session without routing it: the relay still records
+              // tokens, cost and escalations, but every turn runs on one rung. This is the
+              // control arm a routed run is compared against.
               const pinned = pin;
+
+              // Ask Jev which toolsets this turn needs and drop the rest, BEFORE measuring the
+              // request. A tool schema that is never called is waste at every rung, and on this
+              // machine the unused ones were ~91k tokens of a ~100k block. Order matters: the
+              // rung must be chosen against what is actually sent, and 91k is the difference
+              // between the cheapest rung fitting the conversation and not. Decided once per
+              // turn and reused by the tool loop. Built-ins are never dropped.
+              if (process.env.JEV_PRUNE_TOOLS !== "0" && Array.isArray(body.tools)) {
+                const picked = await selectToolsets({ prompt, tools: body.tools });
+                if (picked?.dropped) {
+                  state.keepToolsets = picked.keep;
+                  body.tools = pruneTools(body.tools, picked.keep);
+                  debug(
+                    `${platform}: dropped ${picked.dropped} toolsets, ~${Math.round(picked.savedChars / 3600)}k tokens (${picked.ms}ms)`,
+                  );
+                }
+              }
 
               const models = accountModels([...catalog.values()], platform).filter((m) =>
                 enabledTiers().includes(m.tier),
@@ -217,6 +234,11 @@ export async function startRelay({
 
             // The sentinel is not a real model, so every routed request must be rewritten,
             // including tool-loop follow-ups that reuse the rung chosen for the turn.
+            // Applied to every request of the turn, not only the opening one: the tool block
+            // is re-sent on each tool-loop continuation, which is where most of it is paid for.
+            if (state.keepToolsets && Array.isArray(body.tools)) {
+              body.tools = pruneTools(body.tools, state.keepToolsets);
+            }
             const tier = state.tier ?? current;
             wire.retarget(body, tier, state.model ?? defaultIdFor(tier, platform));
           }
