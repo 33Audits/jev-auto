@@ -266,6 +266,12 @@ forwarded to Claude Code untouched, so `jev --resume` and `jev -p "fix the test"
 
 ---
 
+## Building one of these
+
+[`INTEGRATING.md`](INTEGRATING.md) — the four things that decide whether a Jev-first router
+works, where Jev pays and where it does not, and the benchmark traps that produced a wrong
+number here first.
+
 ## Commands
 
 | Command | What it does |
