@@ -2,6 +2,7 @@
 .env
 *.log
 bench/.calib/
+bench/.swe/
 bench/.work/
 bench/calibration.json
 bench/corpus*.jsonl
@@ -9,4 +10,5 @@ bench/dash/
 bench/jev-cache.json
 bench/oracle.json
 bench/results/
+bench/swebench.json
 node_modules/
