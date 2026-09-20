@@ -33,7 +33,7 @@ const convo = (texts, over = {}) => {
 };
 
 /** Boot a proxy with a stub router and a captured ledger. */
-async function harness({ choice = "fast", confidence = 0.9, status = 200, usage, pin, exploreRate = 0 } = {}) {
+async function harness({ choice = "fast", confidence = 0.9, status = 200, usage, pin, exploreRate = 0, arm } = {}) {
   // Its own store, passed in rather than set on the environment: relays in one process must
   // not be able to resume each other's conversations. A global here raced.
   const threadStore = mkdtempSync(join(tmpdir(), "jev-threads-"));
@@ -51,6 +51,7 @@ async function harness({ choice = "fast", confidence = 0.9, status = 200, usage,
     threadStore,
     exploreRate, // off unless a case is about exploration; otherwise it is a coin flip
     history: [],  // no learned demotions from this machine's ledger
+    arm,
   });
   const base = `http://127.0.0.1:${proxy.port}`;
   return { up, base, calls, ledger, proxy, stop: () => (proxy.close(), up.close()) };
@@ -281,4 +282,29 @@ test("exploration takes the cheaper rung, and only when switched on", async (t) 
   t.after(on.stop);
   await post(on.base, convo(["build another thing"]));
   assert.match(on.up.seen.at(-1).body.model, /haiku/, "on: the cheaper rung is tried");
+});
+
+// A live A/B has to differ by the decisions and nothing else, or it measures two setups.
+test("a control arm meters the session but applies no decision", async (t) => {
+  const routed = await harness({ choice: "fast", arm: "routed" });
+  const control = await harness({ choice: "fast", arm: "control" });
+  t.after(() => (routed.stop(), control.stop()));
+
+  await post(routed.base, convo(["build the thing"]));
+  assert.match(routed.up.seen.at(-1).body.model, /haiku/, "routed: the appraiser's rung is used");
+
+  await post(control.base, convo(["build the thing"]));
+  assert.match(control.up.seen.at(-1).body.model, /sonnet/, "control: held at the default rung");
+
+  await post(routed.base, convo(["build the thing", "next"]));
+  await post(control.base, convo(["build the thing", "next"]));
+  assert.equal(routed.ledger[0].arm, "routed", "each turn records which arm it belonged to");
+  assert.equal(control.ledger[0].arm, "control");
+
+  // Outside an A/B there is no arm, so ordinary sessions never pollute the comparison.
+  const plain = await harness({ choice: "fast" });
+  t.after(plain.stop);
+  await post(plain.base, convo(["something else"]));
+  await post(plain.base, convo(["something else", "next"]));
+  assert.equal(plain.ledger[0].arm, null);
 });

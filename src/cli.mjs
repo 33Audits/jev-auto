@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LEDGER_FILE } from "./tuning.mjs";
-import { read as readLedger, stats as ledgerStats } from "./ledger.mjs";
+import { costOf, read as readLedger, stats as ledgerStats } from "./ledger.mjs";
 import { cutoffs as calibratedThresholds, problemShapes } from "./calibrate.mjs";
 import { renderDecision } from "./report.mjs";
 import { latestDecision, DIR as SESSION_DIR } from "./journal.mjs";
@@ -14,6 +14,7 @@ import { TIER_ORDER, canHold, PRICES_VERIFIED } from "./ladder.mjs";
 import { explorationReport } from "./explore.mjs";
 import { listParked, listRules, park, unpark, PARKED, RULES } from "./context.mjs";
 import { ranked, triage, triageOptions, CRITERIA_DIR } from "./triage.mjs";
+import { pickArm } from "./relay.mjs";
 import { CALIBRATION } from "./tuning.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
@@ -35,6 +36,7 @@ const HELP = `jev — per-turn model routing for Claude Code
   jev stats              What routing has cost, saved, and learned
   jev why [session-id]   The last routing decision, in full
   jev try "<prompt>"     Show where a prompt would appraise, without running anything
+  jev ab [report]        Randomised A/B on your own work: run sessions, then compare
   jev triage <file>      Severity + rejection class for a finding, via Jev
   jev context            What is injected into every session, and park what you are not using
   jev doctor             Check the install
@@ -220,6 +222,55 @@ async function cmdTriage(source) {
   out(`\n  ${r.ms}ms · criteria from ${CRITERIA_DIR.replace(process.env.HOME ?? "", "~")} · ${Object.keys(triageOptions()).length} classes\n`);
 }
 
+/**
+ * Launch a session assigned at random to a routed or control arm, and report the comparison.
+ *
+ * The synthetic benchmarks kept measuring the task rather than the router. This measures real
+ * work: both arms run through the same relay with identical accounting, and the coin flip is
+ * what stops either of us choosing which sessions count.
+ */
+async function cmdAb(sub, rest) {
+  if (sub === "report") return abReport();
+  const arm = pickArm();
+  out(`\n  arm: ${arm}${arm === "control" ? "   (decisions off — this session is the baseline)" : "   (routing + toolset pruning on)"}`);
+  out(`  compare any time with: jev ab report\n`);
+  return runClaude(rest, { JEV_ARM: arm });
+}
+
+function abReport() {
+  const records = readLedger().filter((r) => r.arm);
+  if (records.length < 4) {
+    out(`\n  ${records.length} A/B turns recorded. Run \`jev ab\` for a few sessions first.\n`);
+    return;
+  }
+  const side = (name) => {
+    const rows = records.filter((r) => r.arm === name);
+    const spend = rows.reduce((s, r) => s + costOf(r), 0);
+    const escalated = rows.filter((r) => r.verdict === "escalated").length;
+    return {
+      turns: rows.length,
+      perTurn: rows.length ? spend / rows.length : 0,
+      escalationRate: rows.length ? escalated / rows.length : 0,
+      prunedPerTurn: rows.length ? rows.reduce((s, r) => s + (r.prunedTokens ?? 0), 0) / rows.length : 0,
+    };
+  };
+  const c = side("control");
+  const r = side("routed");
+  out(`\n  ${records.length} turns on your own work: ${r.turns} routed, ${c.turns} control\n`);
+  out("                      cost/turn   escalated   pruned/turn");
+  out(`    control          $${c.perTurn.toFixed(4)}   ${`${Math.round(c.escalationRate * 100)}%`.padStart(8)}   ${Math.round(c.prunedPerTurn)}k`);
+  out(`    routed           $${r.perTurn.toFixed(4)}   ${`${Math.round(r.escalationRate * 100)}%`.padStart(8)}   ${Math.round(r.prunedPerTurn)}k`);
+  if (c.turns && r.turns) {
+    const delta = (r.perTurn / c.perTurn - 1) * 100;
+    out(`\n    routed is ${Math.abs(delta).toFixed(0)}% ${delta < 0 ? "cheaper" : "more expensive"} per turn`);
+    // Cost only counts if the work still landed. An escalation is a turn you had to redo.
+    const worse = r.escalationRate - c.escalationRate;
+    out(`    and needed a redo ${Math.abs(worse * 100).toFixed(0)} points ${worse > 0 ? "MORE" : "less"} often`);
+    if (Math.min(c.turns, r.turns) < 20) out(`\n    (under 20 turns an arm — treat as a hint, not a result)`);
+  }
+  out("");
+}
+
 function cmdDoctor() {
   loadEnvFiles();
   const checks = [];
@@ -298,6 +349,8 @@ export async function main(argv = process.argv.slice(2)) {
       return cmdWhy(rest[0]);
     case "try":
       return cmdTry(rest.join(" "));
+    case "ab":
+      return cmdAb(rest[0], rest.slice(1));
     case "triage":
       return cmdTriage(rest[0]);
     case "context":

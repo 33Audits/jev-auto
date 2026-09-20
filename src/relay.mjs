@@ -29,6 +29,13 @@ const authHeadersOf = (headers) =>
  * `wire` is the platform adapter — Claude Code's Messages shape or Codex's Responses shape.
  * Nothing below this line knows which one it has.
  */
+/**
+ * A live A/B on real work. `jev ab` assigns each session to an arm at random and both arms run
+ * through the same relay, so the only difference is whether the decisions are applied. Without
+ * randomisation the comparison is whatever the user happened to do on each day.
+ */
+export const pickArm = (rng = Math.random) => (rng() < 0.5 ? "routed" : "control");
+
 export async function startRelay({
   wire = claudeWire,
   upstreamURL = wire.upstream,
@@ -47,6 +54,9 @@ export async function startRelay({
   // What exploration has already established. Read from the ledger by default; injectable so
   // a test is not steered by whatever trials happen to sit in the developer's ledger.
   history = readLedger(),
+  // "control" runs the relay with the decisions switched off: metered identically, nothing
+  // routed, nothing pruned. That is the honest counterfactual for a real session.
+  arm = process.env.JEV_ARM === "control" || process.env.JEV_ARM === "routed" ? process.env.JEV_ARM : null,
 } = {}) {
   const platform = wire.platform;
   const threads = new Map();
@@ -140,7 +150,9 @@ export async function startRelay({
               // A pinned rung meters a session without routing it: the relay still records
               // tokens, cost and escalations, but every turn runs on one rung. This is the
               // control arm a routed run is compared against.
-              const pinned = pin;
+              // A control turn holds the rung the CLI would have used, so cost differences come
+              // from the decisions rather than from a different starting point.
+              const pinned = arm === "control" ? (pin ?? "balanced") : pin;
 
               // Ask Jev which toolsets this turn needs and drop the rest, BEFORE measuring the
               // request. A tool schema that is never called is waste at every rung, and on this
@@ -148,10 +160,11 @@ export async function startRelay({
               // rung must be chosen against what is actually sent, and 91k is the difference
               // between the cheapest rung fitting the conversation and not. Decided once per
               // turn and reused by the tool loop. Built-ins are never dropped.
-              if (process.env.JEV_PRUNE_TOOLS !== "0" && Array.isArray(body.tools)) {
+              if (arm !== "control" && process.env.JEV_PRUNE_TOOLS !== "0" && Array.isArray(body.tools)) {
                 const picked = await selectToolsets({ prompt, tools: body.tools });
                 if (picked?.dropped) {
                   state.keepToolsets = picked.keep;
+                  state.prunedTokens = Math.round(picked.savedChars / 3600);
                   body.tools = pruneTools(body.tools, picked.keep);
                   debug(
                     `${platform}: dropped ${picked.dropped} toolsets, ~${Math.round(picked.savedChars / 3600)}k tokens (${picked.ms}ms)`,
@@ -217,7 +230,8 @@ export async function startRelay({
               state.pending = {
                 t: Date.now(), shape, tier,
                 backend: decision?.backend ?? "none", score: decision?.score ?? null,
-                conf: decision?.confidence ?? null, platform, explored,
+                conf: decision?.confidence ?? null, platform, explored, arm,
+                prunedTokens: state.prunedTokens ?? 0,
                 in: 0, out: 0, cacheRead: 0, cacheWrite: 0,
               };
               debug(

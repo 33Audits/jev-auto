@@ -43,6 +43,10 @@ export function toSchema(r) {
     backend: typeof r.backend === "string" ? r.backend.slice(0, 16) : "unknown",
     platform: r.platform in PLATFORMS ? r.platform : "claude",
     explored: r.explored === true,
+    // Which arm of a live A/B this turn belonged to, and what the decisions saved, so a real
+    // session can be compared against itself rather than against a synthetic task.
+    arm: r.arm === "control" ? "control" : r.arm === "routed" ? "routed" : null,
+    prunedTokens: num(r.prunedTokens),
     score: Number.isFinite(r.score) ? Number(r.score.toFixed(3)) : null,
     conf: Number.isFinite(r.conf) ? Number(r.conf.toFixed(3)) : null,
     verdict: VERDICTS.includes(r.verdict) ? r.verdict : "ok",

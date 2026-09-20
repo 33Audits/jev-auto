@@ -89,10 +89,10 @@ const NOT_INSTALLED =
   "[jev]   https://code.claude.com/docs/en/setup\n";
 
 /** Launch Claude Code with routing in front of it. Resolves when the child exits. */
-export async function runClaude(args) {
+export async function runClaude(args, extraEnv = {}) {
   loadEnvFiles();
 
-  const env = { ...process.env };
+  const env = { ...process.env, ...extraEnv };
   // The packaged /jev-why skill lives under the install root, so Claude Code must read it.
   const argv = [...args, "--add-dir", PACKAGE_ROOT];
 
@@ -100,7 +100,7 @@ export async function runClaude(args) {
     process.stderr.write("[jev] JEV_ROUTER=off — starting Claude Code without routing\n");
   } else {
     const previousModel = savedChoice();
-    const { port, close, cutoffs } = await startRelay();
+    const { port, close, cutoffs } = await startRelay({ arm: extraEnv.JEV_ARM ?? undefined });
     env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}`;
     Object.assign(env, pickerEnv());
     argv.push(...statusLineArgs());
