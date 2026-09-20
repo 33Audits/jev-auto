@@ -99,7 +99,8 @@ test("the tier chosen for a turn is reused by the tool loop, not re-decided", as
       { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "..." }] },
     ],
   }));
-  assert.equal(h.calls.length, 1, "one routing decision per user turn");
+  // Tool-steps ARE appraised now — that is where most of the spend is — but in shadow the
+  // decision is only recorded. What serves is still the rung the turn opened on.
   assert.match(h.up.seen.at(-1).body.model, /haiku/, "the continuation still runs on the turn's tier");
 });
 
@@ -266,8 +267,9 @@ test("a turn's usage is the sum of every request it took, not just the first", a
   }
   await post(h.base, convo(["build the thing", "now ship it"])); // next turn flushes the first
 
-  assert.equal(h.ledger[0].out, 150, "three requests at 50 output tokens each");
-  assert.equal(h.ledger[0].in, 300);
+  const turns = h.ledger.filter((r) => !String(r.backend).includes("step"));
+  assert.equal(turns[0].out, 150, "three requests at 50 output tokens each");
+  assert.equal(turns[0].in, 300);
 });
 
 // Exploration is intentionally nondeterministic, so it gets its own case rather than being
@@ -307,4 +309,37 @@ test("a control arm meters the session but applies no decision", async (t) => {
   await post(plain.base, convo(["something else"]));
   await post(plain.base, convo(["something else", "next"]));
   assert.equal(plain.ledger[0].arm, null);
+});
+
+// Most model calls are tool-steps and they carry most of the spend. Deciding only the call
+// that opens a turn leaves that undecided — but switching mid-turn discards the prompt cache,
+// so the decision ships in shadow until the log says it pays.
+test("tool-steps are appraised, and in shadow they change nothing", async (t) => {
+  const h = await harness({ choice: "strong" });
+  t.after(h.stop);
+
+  await post(h.base, convo(["do the thing"]));
+  const openedOn = h.up.seen.at(-1).body.model;
+
+  await post(h.base, turn("", {
+    messages: [
+      { role: "user", content: "do the thing" },
+      { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "Error: ENOENT" }] },
+    ],
+  }));
+
+  assert.equal(h.up.seen.at(-1).body.model, openedOn, "shadow: the served rung is unchanged");
+  const observed = h.ledger.filter((r) => String(r.backend).includes("step"));
+  assert.equal(observed.length, 1, "the step decision is recorded for analysis");
+  assert.match(observed[0].shape, /^step\/err\//, "an errored step is labelled as one");
+});
+
+test("step observations never count as spend", async () => {
+  const { stats } = await import("../src/ledger.mjs");
+  const turn1 = { t: 1, tier: "fast", backend: "jev", platform: "claude", verdict: "ok", in: 1000, out: 500, cacheRead: 0, cacheWrite: 0, shape: "s" };
+  const shadow = { ...turn1, backend: "jev/step-shadow", in: 0, out: 0 };
+  const s = stats([turn1, shadow, shadow]);
+  assert.equal(s.turns, 1, "two shadow observations are not two more turns");
+  assert.ok(s.spend > 0);
 });

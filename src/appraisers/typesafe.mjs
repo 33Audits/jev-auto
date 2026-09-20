@@ -72,7 +72,12 @@ const MAX_LEVEL = 10;
 
 const scoreQuestion = (instructions) => ({ type: "score", instructions, criteria: LEVELS });
 
-export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutoffs, available = TIER_ORDER }) {
+export async function appraise({
+  prompt, contextTokens = 0, toolCount = 0, cutoffs, available = TIER_ORDER,
+  // A tool-step continuation is judged on what just happened, not on the prompt that opened
+  // the turn. Most model calls are these, and they carry most of the spend.
+  step = null,
+}) {
   const local = appraiseLocally({ prompt, contextTokens, toolCount, cutoffs });
   const apiKey = process.env.JEV_API_KEY ?? process.env.TYPESAFE_API_KEY;
   if (!apiKey) return { ...local, backend: "jev/no-key" };
@@ -90,22 +95,39 @@ export async function appraise({ prompt, contextTokens = 0, toolCount = 0, cutof
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: "jev-latest",
-        state: {
-          request: String(prompt).slice(0, 8000),
-          session: { context_tokens: contextTokens, tools_available: toolCount },
-          environment: { available_rungs: Object.keys(criteria) },
-        },
+        state: step?.kind === "tool_step"
+          ? {
+              // Judge THIS step. The original ask is context; the tool output is the subject.
+              turn_started_with: String(step.text ?? "").slice(0, 600),
+              last_tool_output: String(step.digest ?? "").slice(0, 1200),
+              tool_output_was_an_error: step.hadError === true,
+              steps_taken_so_far: step.steps ?? 0,
+              session: { context_tokens: contextTokens, tools_available: toolCount },
+              environment: { available_rungs: Object.keys(criteria) },
+            }
+          : {
+              request: String(prompt).slice(0, 8000),
+              session: { context_tokens: contextTokens, tools_available: toolCount },
+              environment: { available_rungs: Object.keys(criteria) },
+            },
         questions: {
           task_complexity: scoreQuestion("How complex is this coding task overall — its ambiguity, scope, and blast radius?"),
           reasoning_required: scoreQuestion("How much reasoning is needed to get this right in one pass, without a retry on a stronger model?"),
           tool_complexity: scoreQuestion("How complex is the tool use — from none, to many coordinated or stateful operations?"),
           rung: {
             type: "choice",
-            instructions: [
-              "Pick the cheapest rung that can fully complete this request in one pass, without needing a retry on a stronger one.",
-              "Judge the reasoning required, not the length of the reply.",
-              "A failure whose cause is stated in the error is cheaper than one whose cause must be found.",
-            ],
+            instructions: step?.kind === "tool_step"
+              ? [
+                  "Pick the cheapest rung that can decide the NEXT action after this tool output.",
+                  "A clean result that only needs the obvious next step is mechanical work.",
+                  "An error, an unexpected result, or many steps already taken without progress needs real reasoning.",
+                  "Judge this step, not the difficulty of the request that started the turn.",
+                ]
+              : [
+                  "Pick the cheapest rung that can fully complete this request in one pass, without needing a retry on a stronger one.",
+                  "Judge the reasoning required, not the length of the reply.",
+                  "A failure whose cause is stated in the error is cheaper than one whose cause must be found.",
+                ],
             criteria,
           },
         },

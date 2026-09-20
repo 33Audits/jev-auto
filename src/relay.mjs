@@ -57,6 +57,19 @@ export async function startRelay({
   // "control" runs the relay with the decisions switched off: metered identically, nothing
   // routed, nothing pruned. That is the honest counterfactual for a real session.
   arm = process.env.JEV_ARM === "control" || process.env.JEV_ARM === "routed" ? process.env.JEV_ARM : null,
+  /**
+   * Route tool-step continuations, not only the call that opens a turn.
+   *
+   * Opening calls are a small minority of traffic — on live sessions roughly 8% of model calls,
+   * carrying about a quarter of the spend. Pinning a rung for the whole turn therefore leaves
+   * most of the money undecided. The counter-pressure is the prompt cache: switching model
+   * mid-turn discards it.
+   *
+   * So this ships in shadow by default. The decision is made and logged on every step; the
+   * rung the turn is already on is what actually serves. Turn it on with JEV_STEPS=on once the
+   * log says it is worth it.
+   */
+  steps = process.env.JEV_STEPS === "on" ? "on" : process.env.JEV_STEPS === "off" ? "off" : "shadow",
 } = {}) {
   const platform = wire.platform;
   const threads = new Map();
@@ -142,9 +155,35 @@ export async function startRelay({
             // baseline is the balanced rung: an unroutable request must not silently
             // default to the most expensive model.
             const current = state.tier ?? "balanced";
-            const prompt = wire.freshTurnText(body);
+            const ctx = wire.stepContext ? wire.stepContext(body) : { kind: wire.freshTurnText(body) ? "fresh" : "other", text: wire.freshTurnText(body) ?? "" };
+            const prompt = ctx.kind === "other" ? null : ctx.text || wire.freshTurnText(body);
 
-            if (prompt) {
+            // A tool-step is decided on its own merits, but only serves when steps are on.
+            if (ctx.kind === "tool_step" && steps !== "off" && prompt) {
+              const stepDecision = await Promise.resolve()
+                .then(() => appraise({ prompt, contextTokens: wire.weighRequest(body), toolCount: body.tools?.length ?? 0, cutoffs, available: [...new Set(accountModels([...catalog.values()], platform).filter((m) => enabledTiers().includes(m.tier)).map((m) => m.tier))], step: ctx }))
+                .catch(() => null);
+              if (stepDecision) {
+                const served = steps === "on" ? stepDecision.choice : (state.tier ?? current);
+                debug(
+                  `${platform}: step ${steps === "on" ? "->" : "(shadow)"} ${stepDecision.choice} ` +
+                    `p=${stepDecision.confidence?.toFixed(2)} err=${ctx.hadError} n=${ctx.steps} serving=${served}`,
+                );
+                // Logged either way: a shadow decision is the data that says whether to enable it.
+                ledger({
+                  t: Date.now(), shape: `step/${ctx.hadError ? "err" : "ok"}/${Math.min(ctx.steps, 5)}`,
+                  tier: served, backend: `${stepDecision.backend}/step${steps === "on" ? "" : "-shadow"}`,
+                  score: stepDecision.score ?? null, conf: stepDecision.confidence ?? null,
+                  platform, arm, verdict: "ok", in: 0, out: 0, cacheRead: 0, cacheWrite: 0,
+                });
+                if (steps === "on" && stepDecision.choice !== state.tier) {
+                  state.tier = stepDecision.choice;
+                  state.model = modelIdFor(accountModels([...catalog.values()], platform), stepDecision.choice, platform);
+                }
+              }
+            }
+
+            if (ctx.kind === "fresh" && prompt) {
               gradePrevious(state, readsAsRetry(prompt));
 
               // A pinned rung meters a session without routing it: the relay still records

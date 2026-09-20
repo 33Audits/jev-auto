@@ -96,6 +96,61 @@ export const wire = {
     return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim() || null;
   },
 
+  /**
+   * What KIND of call this is, and what the model is about to act on.
+   *
+   * Routing only the opening call of a turn leaves most of the money on the table: on live
+   * traffic roughly 92% of model calls are tool-step continuations and they carry ~74% of the
+   * spend. Judging those against the turn's original prompt is also wrong — a mechanical
+   * continuation after a clean tool result is a different decision from the question that
+   * started the turn.
+   *
+   * So a continuation reports the tail of its last tool output and whether that output looks
+   * like an error, and the appraiser judges THIS step.
+   *
+   * @returns {{kind: "fresh"|"tool_step"|"other", text: string, digest: string, hadError: boolean, steps: number}}
+   */
+  stepContext(body) {
+    if (!Array.isArray(body?.tools) || !body.tools.length) return { kind: "other", text: "", digest: "", hadError: false, steps: 0 };
+    const messages = body.messages ?? [];
+    const last = messages.findLast?.((m) => m?.role === "user" || m?.role === "assistant");
+    if (last?.role !== "user") return { kind: "other", text: "", digest: "", hadError: false, steps: 0 };
+
+    const blocks = Array.isArray(last.content) ? last.content : [];
+    const results = blocks.filter((b) => b?.type === "tool_result");
+    if (!results.length) {
+      const text = this.freshTurnText(body);
+      return text ? { kind: "fresh", text, digest: "", hadError: false, steps: 0 } : { kind: "other", text: "", digest: "", hadError: false, steps: 0 };
+    }
+
+    const textOf = (c) =>
+      typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => b?.text ?? "").join("\n") : "";
+    const output = results.map((r) => textOf(r.content)).join("\n");
+    return {
+      kind: "tool_step",
+      // The turn's original ask, for context — but not what is being judged.
+      text: this.turnOrigin(body),
+      // The tail, not the head: an error surfaces at the end of a command's output.
+      digest: output.replace(/\s+/g, " ").trim().slice(-1200),
+      hadError: results.some((r) => r.is_error === true) || /\b(error|exception|traceback|failed|not found|denied)\b/i.test(output.slice(-2000)),
+      steps: messages.filter((m) => Array.isArray(m.content) && m.content.some((b) => b?.type === "tool_use")).length,
+    };
+  },
+
+  /** The user's own words that opened this turn, for context on a continuation. */
+  turnOrigin(body) {
+    const users = (body?.messages ?? []).filter((m) => m?.role === "user");
+    for (let i = users.length - 1; i >= 0; i--) {
+      const c = users[i].content;
+      if (typeof c === "string") return c.slice(0, 600);
+      if (Array.isArray(c) && !c.some((b) => b?.type === "tool_result")) {
+        return c.filter((b) => b?.type === "text").map((b) => b.text).join("\n")
+          .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim().slice(0, 600);
+      }
+    }
+    return "";
+  },
+
   /** Session id Claude Code embeds in request metadata (a JSON string), or "". */
   sessionIdOf(body) {
     try {

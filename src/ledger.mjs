@@ -93,7 +93,13 @@ export function costOf(record, tier = record.tier, platform = record.platform ??
  * `baseline` is what the same traffic would have cost pinned to the strongest tier —
  * the honest comparison, since that is what a user routes away from.
  */
+/** A step observation, logged for analysis, never served as its own turn. */
+export const isObservation = (r) => typeof r.backend === "string" && r.backend.includes("step");
+
 export function stats(records = read()) {
+  // Step decisions carry no tokens of their own — the turn they belong to is billed once.
+  // Counting them would inflate the turn count and dilute every per-turn figure.
+  records = records.filter((r) => !isObservation(r));
   const strongest = "strong";
   const byTier = {};
   const byShape = {};
