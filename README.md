@@ -281,6 +281,7 @@ number here first.
 | `jev stats` | What routing has cost, saved, and learned |
 | `jev why` | The last routing decision, in full |
 | `jev try "<prompt>"` | Where a prompt would route, without running anything |
+| `jev triage <file>` | Severity + rejection class for a security finding, via Jev |
 | `jev doctor` | Check the install |
 | `jev reset` | Delete the ledger and session state |
 

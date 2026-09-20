@@ -13,6 +13,7 @@ import { appraise as appraiseLocally } from "./appraisers/heuristic.mjs";
 import { TIER_ORDER, canHold, PRICES_VERIFIED } from "./ladder.mjs";
 import { explorationReport } from "./explore.mjs";
 import { listParked, listRules, park, unpark, PARKED, RULES } from "./context.mjs";
+import { ranked, triage, triageOptions, CRITERIA_DIR } from "./triage.mjs";
 import { CALIBRATION } from "./tuning.mjs";
 
 const usd = (x) => `$${x < 0.01 && x > 0 ? x.toFixed(4) : x.toFixed(2)}`;
@@ -34,6 +35,7 @@ const HELP = `jev — per-turn model routing for Claude Code
   jev stats              What routing has cost, saved, and learned
   jev why [session-id]   The last routing decision, in full
   jev try "<prompt>"     Show where a prompt would appraise, without running anything
+  jev triage <file>      Severity + rejection class for a finding, via Jev
   jev context            What is injected into every session, and park what you are not using
   jev doctor             Check the install
   jev reset              Delete the learning ledger and session state
@@ -189,6 +191,35 @@ function cmdContext(action, name) {
   out(`  A parked entry must be restored before the tool that owns it will work.\n`);
 }
 
+/**
+ * Triage a finding against the judging criteria already on disk. Jev returns a severity and a
+ * rejection class; the class is categorical, so its ceiling is applied here rather than hoping
+ * two independent answers agree — they did not, and a zero-address check came back High while
+ * flagging the rule that says it is not a finding.
+ */
+async function cmdTriage(source) {
+  const text = source === "-" || !source ? readFileSync(0, "utf8") : readFileSync(source, "utf8");
+  if (!text.trim()) return out('Usage: jev triage <file>   (or pipe the finding on stdin)');
+
+  const r = await triage(text);
+  if (r.error) {
+    out(`triage unavailable: ${r.error}`);
+    if (/criteria/.test(r.error)) out(`  set JEV_JUDGING_DIR, or place criteria under ${CRITERIA_DIR}`);
+    return;
+  }
+
+  const bar = (a) => ranked(a, 3).join("   ");
+  out("");
+  out(`  Severity assessed   ${String(r.assessed).padEnd(14)} ${bar(r.severity)}`);
+  out(`  Exploit path        ${String(r.exploitConfidence?.choice).padEnd(14)} ${bar(r.exploitConfidence)}`);
+  out(`  Rejection class     ${r.rejectionClass?.choice ?? "n/a"}`);
+  if (r.cappedBy) out(`                      capped by this rule, which states: ${r.ceiling}`);
+  out("");
+  out(`  FINAL               ${r.final}${r.cappedBy ? `   (assessed ${r.assessed}, capped by ${r.cappedBy})` : ""}`);
+  out(`  Would be rejected   ${r.wouldBeRejected == null ? "n/a" : `${Math.round(r.wouldBeRejected * 100)}%`}`);
+  out(`\n  ${r.ms}ms · criteria from ${CRITERIA_DIR.replace(process.env.HOME ?? "", "~")} · ${Object.keys(triageOptions()).length} classes\n`);
+}
+
 function cmdDoctor() {
   loadEnvFiles();
   const checks = [];
@@ -254,6 +285,10 @@ function cmdReset() {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  // Every subcommand may need the key, not just the launchers — `triage` and the `jev`
+  // appraiser both read it, and loading it per-command meant `jev triage` reported no key
+  // while `jev` itself worked.
+  loadEnvFiles();
   const [command, ...rest] = argv;
   switch (command) {
     case "stats":
@@ -263,6 +298,8 @@ export async function main(argv = process.argv.slice(2)) {
       return cmdWhy(rest[0]);
     case "try":
       return cmdTry(rest.join(" "));
+    case "triage":
+      return cmdTriage(rest[0]);
     case "context":
       return cmdContext(rest[0], rest[1]);
     case "doctor":

@@ -70,14 +70,80 @@ export function autoInvalidators(dir = CRITERIA_DIR) {
       if (!m) continue;
       const [, num, rule, result] = m;
       if (/^-+$/.test(rule)) continue;
-      const key = `${platform.toUpperCase()}_AI_${num}`;
-      out[key] = { platform, rule, result };
+      out[`${platform.toUpperCase()}_AI_${num}`] = { platform, rule, result };
     }
   }
   return Object.keys(out).length ? out : null;
 }
 
-/** Which platforms have a criteria file, so the question only offers real ones. */
+/**
+ * The ceiling a published invalidator imposes, read from its own result column.
+ * "INVALID" means not a finding at all; "Low at most" is a cap, not a rejection.
+ */
+export function ceilingOf(result = "") {
+  const text = String(result).toLowerCase();
+  if (/invalid/.test(text)) return "INVALID";
+  if (/informational at most/.test(text)) return "Informational";
+  if (/low at most|qa\/low|capped low/.test(text)) return "Low";
+  if (/capped medium/.test(text)) return "Medium";
+  if (/downgrade/.test(text)) return "DOWNGRADE";
+  return null;
+}
+
+/**
+ * A decidable option set.
+ *
+ * 96 flat invalidators makes Jev choose between near-identical neighbours — it picked
+ * "AI-generated finding without manual validation" for an admin-misuse finding at p=0.46,
+ * when the right answer was the adjacent "requires admin/owner access" rule.
+ *
+ * So the options are the twelve semantic classes the invalidation library already defines,
+ * plus the two categorical buckets the per-platform tables add: a finding that needs a trusted
+ * actor to misbehave, and one on the published "not a finding" list. Each carries the ceiling
+ * its own source states, so a caller can apply it rather than re-deciding.
+ *
+ * The classes are read from the library's own headings. Only the routing of per-platform rules
+ * into the two categorical buckets is done here, by matching the rule text.
+ */
+const CATEGORICAL = {
+  TRUSTED_ACTOR_REQUIRED: {
+    ceiling: "Low",
+    matches: /admin|owner|privileged|governance|centrali/i,
+    meaning: "Requires a trusted role to act against the protocol. Published as Low at most, or invalid.",
+  },
+  CATEGORICALLY_EXCLUDED: {
+    ceiling: "INVALID",
+    matches: /zero address|approval|race condition|event|gas optimi|view function|storage gap|front.?run|best practice|user (error|input)/i,
+    meaning: "On the published list of things that are not findings regardless of framing.",
+  },
+};
+
+export function triageOptions(dir = CRITERIA_DIR) {
+  const library = invalidationCriteria(dir);
+  const autos = autoInvalidators(dir) ?? {};
+  const options = { NONE: { meaning: "The finding stands as written; no class of rejection applies.", ceiling: null } };
+
+  for (const [name, spec] of Object.entries(library ?? {})) {
+    options[name] = { meaning: spec.reasons.slice(0, 4), ceiling: name === "DUST_IMPACT" ? "Low" : null };
+  }
+  for (const [name, spec] of Object.entries(CATEGORICAL)) {
+    const examples = Object.values(autos)
+      .filter((a) => spec.matches.test(a.rule))
+      .map((a) => a.rule);
+    if (!examples.length) continue;
+    options[name] = {
+      meaning: spec.meaning,
+      ceiling: spec.ceiling,
+      examples: [...new Set(examples)].slice(0, 6),
+    };
+  }
+  return options;
+}
+
+/** The ceiling an option imposes, for callers applying it rather than re-deciding. */
+export const ceilingFor = (option, dir = CRITERIA_DIR) => triageOptions(dir)[option]?.ceiling ?? null;
+
+/** Which platforms have a criteria file/** Which platforms have a criteria file, so the question only offers real ones. */
 export const platforms = (dir = CRITERIA_DIR) => {
   try {
     return readdirSync(dir)
@@ -124,30 +190,18 @@ export async function triage(finding, { dir = CRITERIA_DIR } = {}) {
       },
     },
   };
-  if (invalidation) {
-    questions.invalidation = {
-      type: "choice",
-      instructions:
-        "If a judge rejected or downgraded this finding, which class of reason would they cite? " +
-        "Choose NONE when the finding would stand as written.",
-      criteria: { NONE: { meaning: "The finding stands; no class of rejection applies." }, ...invalidation },
-    };
-  }
   // The published per-platform invalidators. Asked as its own question because these are
   // categorical: when one applies it overrides the severity table entirely, and a finding that
   // trips one is not a low-severity finding, it is not a finding.
-  const autos = autoInvalidators(dir);
-  if (autos) {
-    questions.auto_invalidator = {
-      type: "choice",
-      instructions: [
-        "Which published automatic invalidator does this finding trip, if any?",
-        "These are categorical rules from the platforms' own judging guidelines and they override severity.",
-        "Choose NONE only when no listed rule applies.",
-      ],
-      criteria: { NONE: { rule: "No published automatic invalidator applies to this finding." }, ...autos },
-    };
-  }
+  questions.rejection_class = {
+    type: "choice",
+    instructions: [
+      "If a judge rejected or capped this finding, which class of reason would they cite?",
+      "These come from the platforms' own published guidelines and override the severity table.",
+      "Choose NONE only when the finding would stand as written at a rewardable severity.",
+    ],
+    criteria: triageOptions(dir),
+  };
 
   questions.rejected = {
     type: "noul",
@@ -169,11 +223,25 @@ export async function triage(finding, { dir = CRITERIA_DIR } = {}) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const a = (await res.json())?.answers ?? {};
+    // The rejection class is categorical: when one applies it caps severity, and the cap is
+    // stated by the source rather than re-decided here. Two independent answers were
+    // contradicting each other — a zero-address check came back High while simultaneously
+    // flagging the rule that says it is not a finding.
+    const chosen = a.rejection_class?.choice ?? "NONE";
+    const cap = chosen === "NONE" ? null : ceilingFor(chosen, dir);
+    const ORDER = ["INVALID", "Informational", "Low", "Medium", "High", "Critical"];
+    const raw = a.severity?.choice ?? null;
+    const capped =
+      cap && raw && ORDER.indexOf(raw) > ORDER.indexOf(cap) ? cap : raw;
+
     return {
       severity: a.severity ?? null,
+      assessed: raw,
+      final: capped,
+      cappedBy: capped !== raw ? chosen : null,
+      rejectionClass: a.rejection_class ?? null,
+      ceiling: cap,
       exploitConfidence: a.exploit_confidence ?? null,
-      invalidation: a.invalidation ?? null,
-      autoInvalidator: a.auto_invalidator ?? null,
       wouldBeRejected: a.rejected?.noul ?? null,
       ms: Date.now() - started,
     };
