@@ -1,8 +1,12 @@
-node_modules/
+.DS_Store
 .env
 *.log
-.DS_Store
-bench/corpus*.jsonl
-bench/jev-cache.json
+bench/.calib/
 bench/.work/
+bench/calibration.json
+bench/corpus*.jsonl
+bench/dash/
+bench/jev-cache.json
 bench/oracle.json
+bench/results/
+node_modules/
