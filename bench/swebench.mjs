@@ -68,6 +68,9 @@ const testCmd = (ids) =>
 
 function prepare(task, dir) {
   rmSync(dir, { recursive: true, force: true });
+  // Removing the directory does not deregister the worktree, so a rerun after an interrupted
+  // run finds the path still claimed and every `worktree add` fails. Prune first.
+  sh(`git --git-dir=${CACHE} worktree prune`);
   if (sh(`git --git-dir=${CACHE} worktree add --detach ${dir} ${task.base_commit}`).status !== 0) {
     // A detached worktree from a bare repo needs the commit present; fetch it if shallow.
     sh(`git --git-dir=${CACHE} fetch origin ${task.base_commit}`);
@@ -88,15 +91,30 @@ function prepare(task, dir) {
   const fail = JSON.parse(task.FAIL_TO_PASS);
   const before = sh(testCmd(fail), { cwd: dir });
   if (before.status === 0) return { ok: false, why: "FAIL_TO_PASS already passing" };
-  return { ok: true, baseline: before.tail };
+
+  // Which PASS_TO_PASS tests actually pass on this untouched checkout.
+  //
+  // Not all of them do, and not because of anything the model does. These instances are from
+  // 2019-2024 and run here on Python 3.11, which changed how unittest formats nested-class test
+  // names — so a Django assertion about its own error string no longer matches. Holding the
+  // model to a test that was already red marks a correct fix as "broke the suite", which is
+  // exactly what happened to 4 of the first 5 runs.
+  //
+  // So the regression set is established empirically, per instance, before the model runs.
+  const claimed = JSON.parse(task.PASS_TO_PASS).slice(0, 12);
+  const green = [];
+  for (const id of claimed) {
+    if (sh(testCmd([id]), { cwd: dir }).status === 0) green.push(id);
+  }
+  return { ok: true, baseline: before.tail, green, dropped: claimed.length - green.length };
 }
 
-function verify(task, dir) {
+function verify(task, dir, green) {
   const fail = JSON.parse(task.FAIL_TO_PASS);
-  const keep = JSON.parse(task.PASS_TO_PASS).slice(0, 12); // a sample; the full set is thousands
   const fixed = sh(testCmd(fail), { cwd: dir }).status === 0;
-  const intact = keep.length === 0 || sh(testCmd(keep), { cwd: dir }).status === 0;
-  return { fixed, intact, resolved: fixed && intact };
+  // Only the tests that were green before the model touched anything.
+  const intact = green.length === 0 || sh(testCmd(green), { cwd: dir }).status === 0;
+  return { fixed, intact, resolved: fixed && intact, regressionSet: green.length };
 }
 
 if (process.env.JEV_SWE_IMPORT_ONLY === "1") {
@@ -136,7 +154,7 @@ for (const task of TASKS) {
     const started = Date.now();
     spawnSync(process.execPath, [JEVBIN, "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "-p", prompt],
       { cwd: dir, env, encoding: "utf8", maxBuffer: 64e6, timeout: 25 * 60e3 });
-    const v = verify(task, dir);
+    const v = verify(task, dir, prep.green);
 
     const row = {
       task: task.instance_id, tier, jevChoice: d.choice, pFast: d.probabilities?.fast ?? null,
@@ -145,7 +163,9 @@ for (const task of TASKS) {
     };
     results.push(row);
     process.stderr.write(
-      `  ${task.instance_id.padEnd(26)} ${tier.padEnd(9)} ${v.resolved ? "RESOLVED" : v.fixed ? "broke-suite" : "unresolved"}  ${row.seconds}s $${row.spend.toFixed(3)}\n`,
+      `  ${task.instance_id.padEnd(26)} ${tier.padEnd(9)} ` +
+        `${v.resolved ? "RESOLVED" : v.fixed ? "broke-regression" : "unresolved"}  ` +
+        `${row.seconds}s $${row.spend.toFixed(3)} (guard ${v.regressionSet}${prep.dropped ? `, ${prep.dropped} already red` : ""})\n`,
     );
     writeFileSync(OUT, JSON.stringify(results, null, 2));
   }
