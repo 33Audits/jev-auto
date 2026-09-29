@@ -109,7 +109,8 @@ A model in the loop is still available — as an option, not a prerequisite:
 
 | `JEV_ROUTER` | What decides | Needs |
 | --- | --- | --- |
-| `local` *(default)* | the local scorer | nothing |
+| unset *(automatic)* | Jev when a TypeSafe key is present; local otherwise | optional `JEV_API_KEY` |
+| `local` | the local scorer | nothing |
 | `llm` | one Haiku call **through your own Claude subscription** | nothing extra |
 | `jev` | TypeSafe's Jev model | `JEV_API_KEY` |
 | `off` | nothing; plain Claude Code | — |
