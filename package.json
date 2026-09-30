@@ -5,7 +5,9 @@
   "type": "module",
   "bin": { "jev": "bin/jev.mjs" },
   "scripts": {
-    "test": "node --test \"test/**/*.test.mjs\"",
+    "test": "node --test test/*.test.mjs",
+    "bench:routers": "node bench/mission-router-bakeoff.mjs",
+    "bench:aggregate": "node bench/aggregate-router-bakeoffs.mjs",
     "prepublishOnly": "npm test"
   },
   "files": [".claude/skills", "bin", "src", "README.md"],

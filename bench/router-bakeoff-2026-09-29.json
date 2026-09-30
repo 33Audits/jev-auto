@@ -1,0 +1,410 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-29T19:35:58.706Z",
+  "runCount": 3,
+  "runIds": [
+    "2026-09-29T19:35:32.546Z",
+    "2026-09-29T19:35:39.414Z",
+    "2026-09-29T19:35:48.165Z"
+  ],
+  "corpus": {
+    "version": "2026-09-29.1",
+    "frozen": true,
+    "missions": 30,
+    "holdout": 21,
+    "sha256": "dcab52be97b734d46c4bc6d5b387edb42d4cc9b275a44740ac9980f5af330a3c"
+  },
+  "implementationSha256": "e645d66cc0f55cdddf15bbd502222b1fab0b0865d87faa3c9ad9b0face3967c6",
+  "methodology": {
+    "evidence": "authored-label agreement only; no model execution",
+    "currentTier": "balanced",
+    "contextTokens": 0,
+    "toolCount": 0,
+    "toolCountLimitation": "fixed CLI input; use --tool-count to match the target harness catalog",
+    "policyAppliedTo": [
+      "local",
+      "jev",
+      "llm"
+    ],
+    "fixedControlsBypassPolicy": true,
+    "policy": {
+      "available": [
+        "fast",
+        "balanced",
+        "strong"
+      ],
+      "cutoffs": {
+        "cheap": 0.28,
+        "strong": 0.58
+      },
+      "minConfidence": 0.3,
+      "upgradeMinConfidence": 0.9,
+      "uncertainCeiling": "balanced",
+      "switchMaxContextTokens": 20000,
+      "cheapWhenUnsure": true,
+      "hasCache": false,
+      "floor": null,
+      "platform": "claude"
+    },
+    "armsAreNotRanked": true,
+    "endpoints": {
+      "jev": "https://api.typesafe.ai",
+      "llm": "https://api.anthropic.com"
+    },
+    "models": {
+      "jev": "jev-latest",
+      "llm": "claude-haiku-4-5-20251001"
+    },
+    "tierUnits": "relative proxy only: fast=1, balanced=3, strong=15, long=15"
+  },
+  "arms": {
+    "local": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 8,
+          "under": 9,
+          "over": 4,
+          "exactRate": 0.38095238095238093,
+          "tierUnits": 59
+        },
+        {
+          "n": 21,
+          "exact": 8,
+          "under": 9,
+          "over": 4,
+          "exactRate": 0.38095238095238093,
+          "tierUnits": 59
+        },
+        {
+          "n": 21,
+          "exact": 8,
+          "under": 9,
+          "over": 4,
+          "exactRate": 0.38095238095238093,
+          "tierUnits": 59
+        }
+      ],
+      "policyHoldout": [
+        {
+          "n": 21,
+          "exact": 9,
+          "under": 9,
+          "over": 3,
+          "exactRate": 0.42857142857142855,
+          "tierUnits": 57
+        },
+        {
+          "n": 21,
+          "exact": 9,
+          "under": 9,
+          "over": 3,
+          "exactRate": 0.42857142857142855,
+          "tierUnits": 57
+        },
+        {
+          "n": 21,
+          "exact": 9,
+          "under": 9,
+          "over": 3,
+          "exactRate": 0.42857142857142855,
+          "tierUnits": 57
+        }
+      ],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    "jev": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 9,
+          "under": 6,
+          "over": 6,
+          "exactRate": 0.42857142857142855,
+          "tierUnits": 157
+        },
+        {
+          "n": 21,
+          "exact": 10,
+          "under": 5,
+          "over": 6,
+          "exactRate": 0.47619047619047616,
+          "tierUnits": 181
+        },
+        {
+          "n": 21,
+          "exact": 11,
+          "under": 5,
+          "over": 5,
+          "exactRate": 0.5238095238095238,
+          "tierUnits": 167
+        }
+      ],
+      "policyHoldout": [
+        {
+          "n": 21,
+          "exact": 8,
+          "under": 11,
+          "over": 2,
+          "exactRate": 0.38095238095238093,
+          "tierUnits": 75
+        },
+        {
+          "n": 21,
+          "exact": 7,
+          "under": 12,
+          "over": 2,
+          "exactRate": 0.3333333333333333,
+          "tierUnits": 73
+        },
+        {
+          "n": 21,
+          "exact": 8,
+          "under": 11,
+          "over": 2,
+          "exactRate": 0.38095238095238093,
+          "tierUnits": 75
+        }
+      ],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        156,
+        148,
+        148
+      ]
+    },
+    "llm": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 13,
+          "under": 3,
+          "over": 5,
+          "exactRate": 0.6190476190476191,
+          "tierUnits": 225
+        },
+        {
+          "n": 21,
+          "exact": 13,
+          "under": 3,
+          "over": 5,
+          "exactRate": 0.6190476190476191,
+          "tierUnits": 225
+        },
+        {
+          "n": 21,
+          "exact": 13,
+          "under": 3,
+          "over": 5,
+          "exactRate": 0.6190476190476191,
+          "tierUnits": 225
+        }
+      ],
+      "policyHoldout": [
+        {
+          "n": 21,
+          "exact": 10,
+          "under": 9,
+          "over": 2,
+          "exactRate": 0.47619047619047616,
+          "tierUnits": 57
+        },
+        {
+          "n": 21,
+          "exact": 10,
+          "under": 9,
+          "over": 2,
+          "exactRate": 0.47619047619047616,
+          "tierUnits": 57
+        },
+        {
+          "n": 21,
+          "exact": 10,
+          "under": 9,
+          "over": 2,
+          "exactRate": 0.47619047619047616,
+          "tierUnits": 57
+        }
+      ],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        446,
+        442,
+        448
+      ]
+    },
+    "fixed-fast": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 5,
+          "under": 16,
+          "over": 0,
+          "exactRate": 0.23809523809523808,
+          "tierUnits": 21
+        },
+        {
+          "n": 21,
+          "exact": 5,
+          "under": 16,
+          "over": 0,
+          "exactRate": 0.23809523809523808,
+          "tierUnits": 21
+        },
+        {
+          "n": 21,
+          "exact": 5,
+          "under": 16,
+          "over": 0,
+          "exactRate": 0.23809523809523808,
+          "tierUnits": 21
+        }
+      ],
+      "policyHoldout": [],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    "fixed-balanced": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 7,
+          "under": 9,
+          "over": 5,
+          "exactRate": 0.3333333333333333,
+          "tierUnits": 63
+        },
+        {
+          "n": 21,
+          "exact": 7,
+          "under": 9,
+          "over": 5,
+          "exactRate": 0.3333333333333333,
+          "tierUnits": 63
+        },
+        {
+          "n": 21,
+          "exact": 7,
+          "under": 9,
+          "over": 5,
+          "exactRate": 0.3333333333333333,
+          "tierUnits": 63
+        }
+      ],
+      "policyHoldout": [],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    "fixed-strong": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 6,
+          "under": 3,
+          "over": 12,
+          "exactRate": 0.2857142857142857,
+          "tierUnits": 315
+        },
+        {
+          "n": 21,
+          "exact": 6,
+          "under": 3,
+          "over": 12,
+          "exactRate": 0.2857142857142857,
+          "tierUnits": 315
+        },
+        {
+          "n": 21,
+          "exact": 6,
+          "under": 3,
+          "over": 12,
+          "exactRate": 0.2857142857142857,
+          "tierUnits": 315
+        }
+      ],
+      "policyHoldout": [],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        0,
+        0,
+        0
+      ]
+    },
+    "fixed-long": {
+      "rawHoldout": [
+        {
+          "n": 21,
+          "exact": 3,
+          "under": 0,
+          "over": 18,
+          "exactRate": 0.14285714285714285,
+          "tierUnits": 315
+        },
+        {
+          "n": 21,
+          "exact": 3,
+          "under": 0,
+          "over": 18,
+          "exactRate": 0.14285714285714285,
+          "tierUnits": 315
+        },
+        {
+          "n": 21,
+          "exact": 3,
+          "under": 0,
+          "over": 18,
+          "exactRate": 0.14285714285714285,
+          "tierUnits": 315
+        }
+      ],
+      "policyHoldout": [],
+      "fallbackCounts": [
+        0,
+        0,
+        0
+      ],
+      "medianLatencyMs": [
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}
